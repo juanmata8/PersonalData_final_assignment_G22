@@ -35,38 +35,63 @@
       </article>
     </section>
 
-    <section class="panel">
-      <p class="eyebrow">Prompt Quality Patterns</p>
-      <h2>Prompt quality ratios over time</h2>
-      <div class="form-grid">
-        <div class="field">
-          <label for="timeAxisMode">X-axis grouping</label>
-          <select id="timeAxisMode">
-            <option value="hour">Time of day</option>
-            <option value="weekday">Day of week</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="timeRangeStart">From</label>
-          <input id="timeRangeStart" type="date">
-        </div>
-        <div class="field">
-          <label for="timeRangeEnd">To</label>
-          <input id="timeRangeEnd" type="date">
-        </div>
-      </div>
-      <p class="muted">Good prompts are explanation-oriented coding prompts that support learning. Bad prompts are offloading-oriented coding prompts that ask the model to do the work for you. Unknown prompts are coding-related prompts without a clear offloading classification. The ratio chart shows the share of each category within each selected period.</p>
-    </section>
-
     <section class="stack">
       <article class="panel">
         <p class="eyebrow">Ratio</p>
         <h2>Good, bad, and unknown ratios by selected period</h2>
+        <div class="control-panel">
+          <div class="control-header">
+            <strong>Ratio Controls</strong>
+            <span>These controls affect only the ratio chart.</span>
+          </div>
+          <div class="form-grid compact-grid">
+            <div class="field">
+              <label for="ratioAxisMode">X-axis grouping</label>
+              <select id="ratioAxisMode">
+                <option value="hour">Time of day</option>
+                <option value="weekday">Day of week</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="ratioRangeStart">From</label>
+              <input id="ratioRangeStart" type="date">
+            </div>
+            <div class="field">
+              <label for="ratioRangeEnd">To</label>
+              <input id="ratioRangeEnd" type="date">
+            </div>
+          </div>
+        </div>
+        <p class="muted">Good prompts are explanation-oriented coding prompts that support learning. Bad prompts are offloading-oriented coding prompts that ask the model to do the work for you. Unknown prompts are coding-related prompts without a clear offloading classification.</p>
         <div id="qualityRatioChart"></div>
       </article>
       <article class="panel">
         <p class="eyebrow">Counts</p>
         <h2>Bad and good prompt counts by selected period</h2>
+        <div class="control-panel">
+          <div class="control-header">
+            <strong>Count Controls</strong>
+            <span>These controls affect only the count chart.</span>
+          </div>
+          <div class="form-grid compact-grid">
+            <div class="field">
+              <label for="countAxisMode">X-axis grouping</label>
+              <select id="countAxisMode">
+                <option value="hour">Time of day</option>
+                <option value="weekday">Day of week</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="countRangeStart">From</label>
+              <input id="countRangeStart" type="date">
+            </div>
+            <div class="field">
+              <label for="countRangeEnd">To</label>
+              <input id="countRangeEnd" type="date">
+            </div>
+          </div>
+        </div>
+        <p class="muted">Good prompts are explanation-oriented coding prompts that support learning. Bad prompts are offloading-oriented coding prompts that ask the model to do the work for you. Unknown prompts are coding-related prompts without a clear offloading classification.</p>
         <div id="qualityCountChart"></div>
       </article>
     </section>
@@ -74,19 +99,25 @@
     <section class="panel">
       <p class="eyebrow">Hour of Day</p>
       <h2>Hourly usage heatmap</h2>
-      <div class="button-row">
-        <label class="badge">
-          <input id="heatmapGoodToggle" type="checkbox" checked>
-          Good prompts
-        </label>
-        <label class="badge">
-          <input id="heatmapBadToggle" type="checkbox" checked>
-          Bad prompts
-        </label>
-        <label class="badge">
-          <input id="heatmapUnknownToggle" type="checkbox" checked>
-          Unknown prompts
-        </label>
+      <div class="control-panel">
+        <div class="control-header">
+          <strong>Heatmap Filters</strong>
+          <span>Select which prompt types the heatmap should include.</span>
+        </div>
+        <div class="button-row">
+          <label class="badge interactive-badge">
+            <input id="heatmapGoodToggle" type="checkbox" checked>
+            Good prompts
+          </label>
+          <label class="badge interactive-badge">
+            <input id="heatmapBadToggle" type="checkbox" checked>
+            Bad prompts
+          </label>
+          <label class="badge interactive-badge">
+            <input id="heatmapUnknownToggle" type="checkbox" checked>
+            Unknown prompts
+          </label>
+        </div>
       </div>
       <p class="muted">Good prompts are explanation-oriented coding prompts that support learning. Bad prompts are offloading-oriented coding prompts that ask the model to do the work for you. Unknown prompts are coding-related prompts without a clear offloading classification. The heatmap reflects whichever categories are selected.</p>
       <div id="hourlyHeatmap"></div>

@@ -10,31 +10,34 @@ const weekdayChart = document.getElementById("weekdayChart");
 const hourlyHeatmap = document.getElementById("hourlyHeatmap");
 const qualityRatioChart = document.getElementById("qualityRatioChart");
 const qualityCountChart = document.getElementById("qualityCountChart");
-const timeAxisMode = document.getElementById("timeAxisMode");
-const timeRangeStart = document.getElementById("timeRangeStart");
-const timeRangeEnd = document.getElementById("timeRangeEnd");
+const ratioAxisMode = document.getElementById("ratioAxisMode");
+const ratioRangeStart = document.getElementById("ratioRangeStart");
+const ratioRangeEnd = document.getElementById("ratioRangeEnd");
+const countAxisMode = document.getElementById("countAxisMode");
+const countRangeStart = document.getElementById("countRangeStart");
+const countRangeEnd = document.getElementById("countRangeEnd");
 const heatmapGoodToggle = document.getElementById("heatmapGoodToggle");
 const heatmapBadToggle = document.getElementById("heatmapBadToggle");
 const heatmapUnknownToggle = document.getElementById("heatmapUnknownToggle");
 
 let conversationsCache = [];
 
-function syncDateInputs(detail) {
+function syncDateInputs(startInput, endInput, detail) {
   if (!detail.minDate || !detail.maxDate) {
     return;
   }
 
-  timeRangeStart.min = detail.minDate;
-  timeRangeStart.max = detail.maxDate;
-  timeRangeEnd.min = detail.minDate;
-  timeRangeEnd.max = detail.maxDate;
+  startInput.min = detail.minDate;
+  startInput.max = detail.maxDate;
+  endInput.min = detail.minDate;
+  endInput.max = detail.maxDate;
 
-  if (!timeRangeStart.value) {
-    timeRangeStart.value = detail.minDate;
+  if (!startInput.value) {
+    startInput.value = detail.minDate;
   }
 
-  if (!timeRangeEnd.value) {
-    timeRangeEnd.value = detail.maxDate;
+  if (!endInput.value) {
+    endInput.value = detail.maxDate;
   }
 }
 
@@ -44,16 +47,31 @@ async function renderPage() {
   }
 
   const analysis = analyzeConversations(conversationsCache);
-  const detail = buildTimePatternDetail(conversationsCache, {
-    axisMode: timeAxisMode.value,
-    startDate: timeRangeStart.value,
-    endDate: timeRangeEnd.value,
+  const ratioDetail = buildTimePatternDetail(conversationsCache, {
+    axisMode: ratioAxisMode.value,
+    startDate: ratioRangeStart.value,
+    endDate: ratioRangeEnd.value,
+    includeGood: heatmapGoodToggle.checked,
+    includeBad: heatmapBadToggle.checked,
+    includeUnknown: heatmapUnknownToggle.checked
+  });
+  const countDetail = buildTimePatternDetail(conversationsCache, {
+    axisMode: countAxisMode.value,
+    startDate: countRangeStart.value,
+    endDate: countRangeEnd.value,
+    includeGood: heatmapGoodToggle.checked,
+    includeBad: heatmapBadToggle.checked,
+    includeUnknown: heatmapUnknownToggle.checked
+  });
+  const heatmapDetail = buildTimePatternDetail(conversationsCache, {
+    axisMode: "hour",
     includeGood: heatmapGoodToggle.checked,
     includeBad: heatmapBadToggle.checked,
     includeUnknown: heatmapUnknownToggle.checked
   });
 
-  syncDateInputs(detail);
+  syncDateInputs(ratioRangeStart, ratioRangeEnd, ratioDetail);
+  syncDateInputs(countRangeStart, countRangeEnd, countDetail);
 
   renderBarChart(dailyChart, analysis.dailyCounts.slice(-10), {
     emptyMessage: "No interaction history is available yet."
@@ -62,10 +80,10 @@ async function renderPage() {
     variant: "green",
     emptyMessage: "No weekday pattern is available yet."
   });
-  renderHeatGrid(hourlyHeatmap, detail.filteredHourlyCounts.map(([hour, value]) => [`${hour.padStart(2, "0")}:00`, value]), {
+  renderHeatGrid(hourlyHeatmap, heatmapDetail.filteredHourlyCounts.map(([hour, value]) => [`${hour.padStart(2, "0")}:00`, value]), {
     emptyMessage: "No hourly pattern is available yet."
   });
-  renderDualLineChart(qualityRatioChart, detail.qualitySeries, {
+  renderDualLineChart(qualityRatioChart, ratioDetail.qualitySeries, {
     yMax: 1,
     goodLabel: "Good prompts",
     badLabel: "Bad prompts",
@@ -73,7 +91,7 @@ async function renderPage() {
     yLabel: "Ratio",
     emptyMessage: "No coding prompts are available in the selected interval."
   });
-  renderGroupedBarChart(qualityCountChart, detail.qualityCountSeries, {
+  renderGroupedBarChart(qualityCountChart, countDetail.qualityCountSeries, {
     goodLabel: "Good",
     badLabel: "Bad",
     unknownLabel: "Unknown",
@@ -83,13 +101,22 @@ async function renderPage() {
 }
 
 ["change", "input"].forEach((eventName) => {
-  timeAxisMode.addEventListener(eventName, () => {
+  ratioAxisMode.addEventListener(eventName, () => {
     void renderPage();
   });
-  timeRangeStart.addEventListener(eventName, () => {
+  ratioRangeStart.addEventListener(eventName, () => {
     void renderPage();
   });
-  timeRangeEnd.addEventListener(eventName, () => {
+  ratioRangeEnd.addEventListener(eventName, () => {
+    void renderPage();
+  });
+  countAxisMode.addEventListener(eventName, () => {
+    void renderPage();
+  });
+  countRangeStart.addEventListener(eventName, () => {
+    void renderPage();
+  });
+  countRangeEnd.addEventListener(eventName, () => {
     void renderPage();
   });
   heatmapGoodToggle.addEventListener(eventName, () => {

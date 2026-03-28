@@ -310,6 +310,10 @@ a {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
+.compact-grid {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -321,12 +325,65 @@ a {
 }
 
 .field select,
-.field input[type="file"] {
+.field input[type="file"],
+.field input[type="date"] {
   width: 100%;
   border-radius: 12px;
   border: 1px solid var(--line);
   padding: 0.75rem 0.85rem;
   background: #fffbf5;
+  color: var(--ink);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.field select:focus,
+.field input[type="file"]:focus,
+.field input[type="date"]:focus {
+  outline: 2px solid rgba(168, 72, 31, 0.18);
+  border-color: var(--accent);
+}
+
+.control-panel {
+  margin: 12px 0 14px;
+  padding: 14px;
+  border: 1px solid rgba(216, 204, 184, 0.9);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 245, 0.96), rgba(250, 241, 228, 0.92));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.control-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.control-header strong {
+  font-size: 0.92rem;
+}
+
+.control-header span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.interactive-badge {
+  padding: 0.55rem 0.9rem;
+  gap: 8px;
+  background: rgba(255, 248, 241, 0.94);
+  transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
+}
+
+.interactive-badge:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.interactive-badge input {
+  accent-color: var(--green);
 }
 
 .preview-table,

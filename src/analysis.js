@@ -429,6 +429,10 @@ function toSortedEntries(counter) {
   return Object.entries(counter).sort((a, b) => b[1] - a[1]);
 }
 
+function toChronologicalEntries(counter) {
+  return Object.entries(counter).sort((a, b) => a[0].localeCompare(b[0]));
+}
+
 function topWords(interactions, field, limit = 30) {
   const counts = {};
   interactions.forEach((interaction) => {
@@ -719,7 +723,7 @@ export function analyzeConversations(conversations) {
     codingInteractions,
     totalInteractions: normalizedInteractions.length,
     totalCodingInteractions: codingInteractions.length,
-    dailyCounts: toSortedEntries(dailyCounts),
+    dailyCounts: toChronologicalEntries(dailyCounts),
     hourlyCounts: Array.from({ length: 24 }, (_, hour) => [String(hour), hourlyCounts[hour] || 0]),
     weekdayCounts: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => [day, weekdayCounts[day] || 0]),
     topicCounts: sortedTopicCounts,
@@ -742,9 +746,11 @@ export function buildTimePatternDetail(conversations, options = {}) {
   const axisMode = options.axisMode === "weekday" ? "weekday" : "hour";
   const series = buildPromptQualitySeries(filtered, axisMode);
 
+  const chronologicalInteractions = [...codingInteractions].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
   return {
-    minDate: codingInteractions.length ? codingInteractions[0].timestamp.slice(0, 10) : "",
-    maxDate: codingInteractions.length ? codingInteractions[codingInteractions.length - 1].timestamp.slice(0, 10) : "",
+    minDate: chronologicalInteractions.length ? chronologicalInteractions[0].timestamp.slice(0, 10) : "",
+    maxDate: chronologicalInteractions.length ? chronologicalInteractions[chronologicalInteractions.length - 1].timestamp.slice(0, 10) : "",
     qualitySeries: {
       labels: series.labels,
       goodValues: series.goodRatios,
