@@ -613,9 +613,9 @@ function buildPromptQualitySeries(interactions, axisMode) {
       ? ((date.getDay() + 6) % 7)
       : date.getHours();
 
-    if (interaction.offloadingLabel === "offloading") {
+    if (interaction.offloadingLabel === "non_offloading") {
       buckets[bucketIndex].good += 1;
-    } else if (interaction.offloadingLabel === "non_offloading") {
+    } else if (interaction.offloadingLabel === "offloading") {
       buckets[bucketIndex].bad += 1;
     } else {
       buckets[bucketIndex].unknown += 1;
@@ -651,8 +651,8 @@ function buildFilteredHourlyCounts(interactions, filters = {}) {
   interactions.forEach((interaction) => {
     const label = interaction.offloadingLabel;
     const includeInteraction =
-      (includeGood && label === "offloading") ||
-      (includeBad && label === "non_offloading") ||
+      (includeGood && label === "non_offloading") ||
+      (includeBad && label === "offloading") ||
       (includeUnknown && label === "unknown");
 
     if (!includeInteraction) {

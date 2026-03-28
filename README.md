@@ -10,6 +10,8 @@ The extension stores imported and live-captured conversations locally in browser
 - frequent words in prompts and responses
 - a heuristic cognitive offloading score
 
+The visualization layer uses a vendored local D3.js bundle, so charts remain self-contained inside the extension package.
+
 ## Included pages
 
 - `index.html`: Popup launcher

@@ -1,3 +1,5 @@
+const d3 = globalThis.d3;
+
 function emptyState(message) {
   const element = document.createElement("div");
   element.className = "empty-state";
@@ -5,145 +7,205 @@ function emptyState(message) {
   return element;
 }
 
-export function renderBarChart(container, items, options = {}) {
+function ensureD3() {
+  if (!d3) {
+    throw new Error("D3 is not loaded on this page.");
+  }
+}
+
+function clearContainer(container) {
   container.innerHTML = "";
+  return d3.select(container);
+}
+
+function createLegend(container, items) {
+  const legend = container.append("div").attr("class", "chart-legend");
+  const cells = legend.selectAll(".legend-item").data(items).enter().append("span").attr("class", "legend-item");
+  cells.append("span").attr("class", (item) => `legend-swatch ${item.className || ""}`.trim());
+  cells.append("span").text((item) => item.label);
+}
+
+function createResponsiveSvg(container, width, height) {
+  return container
+    .append("svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("class", "chart-svg")
+    .style("width", "100%")
+    .style("height", "auto");
+}
+
+function applyAxisStyle(selection) {
+  selection.selectAll("path").attr("stroke", "rgba(100, 91, 80, 0.24)");
+  selection.selectAll("line").attr("stroke", "rgba(100, 91, 80, 0.2)");
+  selection.selectAll("text")
+    .attr("fill", "#645b50")
+    .style("font-size", "10px");
+}
+
+export function renderBarChart(container, items, options = {}) {
+  ensureD3();
+  const root = clearContainer(container);
 
   if (!items.length) {
     container.appendChild(emptyState(options.emptyMessage || "No data available."));
     return;
   }
 
-  const maxValue = Math.max(...items.map(([, value]) => value), 1);
-  const wrapper = document.createElement("div");
-  wrapper.className = "chart";
+  const data = items.map(([label, value]) => ({ label, value }));
+  const width = 720;
+  const height = 320;
+  const margin = { top: 16, right: 20, bottom: 78, left: 46 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+  const fillClass = options.variant === "green" ? "green" : "";
 
-  items.forEach(([label, value]) => {
-    const row = document.createElement("div");
-    row.className = "bar-chart-item";
+  const svg = createResponsiveSvg(root, width, height);
+  const chart = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-    const labelEl = document.createElement("strong");
-    labelEl.textContent = label;
+  const x = d3.scaleBand().domain(data.map((item) => item.label)).range([0, innerWidth]).padding(0.22);
+  const y = d3.scaleLinear().domain([0, d3.max(data, (item) => item.value) || 1]).nice().range([innerHeight, 0]);
 
-    const track = document.createElement("div");
-    track.className = "bar-track";
+  chart.append("g")
+    .attr("class", "chart-grid")
+    .call(d3.axisLeft(y).ticks(4).tickSize(-innerWidth).tickFormat(""))
+    .call((group) => {
+      group.select(".domain").remove();
+      group.selectAll("line").attr("stroke", "rgba(100, 91, 80, 0.12)");
+    });
 
-    const fill = document.createElement("div");
-    fill.className = `bar-fill ${options.variant === "green" ? "green" : ""}`.trim();
-    fill.style.width = `${(value / maxValue) * 100}%`;
-    track.appendChild(fill);
+  chart.append("g")
+    .call(d3.axisLeft(y).ticks(4))
+    .call(applyAxisStyle)
+    .selectAll("text")
+    .style("font-size", "11px");
 
-    const valueEl = document.createElement("span");
-    valueEl.textContent = String(value);
+  chart.append("g")
+    .attr("transform", `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x).tickSizeOuter(0))
+    .call(applyAxisStyle)
+    .selectAll("text")
+    .attr("transform", "rotate(-35)")
+    .style("text-anchor", "end");
 
-    row.append(labelEl, track, valueEl);
-    wrapper.appendChild(row);
-  });
+  chart.selectAll(".bar-track-bg")
+    .data(data)
+    .enter()
+    .append("rect")
+    .attr("x", (item) => x(item.label))
+    .attr("y", 0)
+    .attr("width", x.bandwidth())
+    .attr("height", innerHeight)
+    .attr("rx", 9)
+    .attr("class", "chart-bar-track-bg");
 
-  container.appendChild(wrapper);
+  chart.selectAll(".chart-bar-fill")
+    .data(data)
+    .enter()
+    .append("rect")
+    .attr("x", (item) => x(item.label))
+    .attr("y", (item) => y(item.value))
+    .attr("width", x.bandwidth())
+    .attr("height", (item) => innerHeight - y(item.value))
+    .attr("rx", 9)
+    .attr("class", `chart-bar-fill ${fillClass}`.trim());
+
+  chart.selectAll(".bar-value")
+    .data(data)
+    .enter()
+    .append("text")
+    .attr("x", (item) => (x(item.label) || 0) + x.bandwidth() / 2)
+    .attr("y", (item) => y(item.value) - 8)
+    .attr("text-anchor", "middle")
+    .attr("fill", "#201a15")
+    .style("font-size", "11px")
+    .text((item) => item.value);
+
+  svg.append("text")
+    .attr("x", margin.left)
+    .attr("y", 12)
+    .attr("class", "bar-axis-label")
+    .text(options.yLabel || "Count");
 }
 
 export function renderHeatGrid(container, items, options = {}) {
-  container.innerHTML = "";
+  ensureD3();
+  const root = clearContainer(container);
 
   if (!items.length) {
     container.appendChild(emptyState(options.emptyMessage || "No data available."));
     return;
   }
 
-  const maxValue = Math.max(...items.map(([, value]) => value), 1);
-  const grid = document.createElement("div");
-  grid.className = "heat-grid";
+  const data = items.map(([label, value]) => ({ label, value }));
+  const maxValue = d3.max(data, (item) => item.value) || 1;
+  const color = d3.scaleLinear().domain([0, maxValue]).range(["rgba(168, 72, 31, 0.12)", "rgba(168, 72, 31, 0.58)"]);
 
-  items.forEach(([label, value]) => {
-    const cell = document.createElement("div");
-    cell.className = "heat-cell";
-    const intensity = value / maxValue;
-    cell.style.background = `rgba(168, 72, 31, ${0.12 + intensity * 0.45})`;
-
-    const title = document.createElement("strong");
-    title.textContent = label;
-    const count = document.createElement("span");
-    count.textContent = String(value);
-
-    cell.append(title, count);
-    grid.appendChild(cell);
-  });
-
-  container.appendChild(grid);
+  const grid = root.append("div").attr("class", "heat-grid");
+  const cells = grid.selectAll(".heat-cell").data(data).enter().append("div").attr("class", "heat-cell");
+  cells.style("background", (item) => color(item.value));
+  cells.append("strong").text((item) => item.label);
+  cells.append("span").text((item) => item.value);
 }
 
 export function renderWordCloud(container, items, variant = "warm") {
-  container.innerHTML = "";
+  ensureD3();
+  const root = clearContainer(container);
 
   if (!items.length) {
     container.appendChild(emptyState("No coding-related words are available yet."));
     return;
   }
 
-  const maxValue = Math.max(...items.map((item) => item.count), 1);
-  const cloud = document.createElement("div");
-  cloud.className = "word-cloud";
+  const maxValue = d3.max(items, (item) => item.count) || 1;
+  const size = d3.scaleLinear().domain([1, maxValue]).range([12, 32]);
+  const cloud = root.append("div").attr("class", "word-cloud");
 
-  items.forEach((item) => {
-    const pill = document.createElement("span");
-    pill.className = `word-pill ${variant === "cool" ? "alt" : ""}`.trim();
-    pill.style.fontSize = `${0.82 + (item.count / maxValue) * 1.2}rem`;
-    pill.textContent = `${item.word} (${item.count})`;
-    cloud.appendChild(pill);
-  });
-
-  container.appendChild(cloud);
+  cloud.selectAll(".word-pill")
+    .data(items)
+    .enter()
+    .append("span")
+    .attr("class", `word-pill ${variant === "cool" ? "alt" : ""}`.trim())
+    .style("font-size", (item) => `${size(item.count)}px`)
+    .text((item) => `${item.word} (${item.count})`);
 }
 
 export function renderWordTable(container, items, title) {
-  container.innerHTML = "";
+  ensureD3();
+  const root = clearContainer(container);
 
   if (!items.length) {
     container.appendChild(emptyState("No word frequency data is available yet."));
     return;
   }
 
-  const table = document.createElement("table");
-  table.className = "word-table";
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th>${title}</th>
-        <th>Count</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  `;
+  const table = root.append("table").attr("class", "word-table");
+  const thead = table.append("thead").append("tr");
+  thead.append("th").text(title);
+  thead.append("th").text("Count");
 
-  const tbody = table.querySelector("tbody");
-  items.forEach((item) => {
-    const row = document.createElement("tr");
-    row.innerHTML = `<td>${item.word}</td><td>${item.count}</td>`;
-    tbody.appendChild(row);
-  });
-
-  container.appendChild(table);
+  const rows = table.append("tbody").selectAll("tr").data(items).enter().append("tr");
+  rows.append("td").text((item) => item.word);
+  rows.append("td").text((item) => item.count);
 }
 
 export function renderMetricList(container, items) {
-  container.innerHTML = "";
+  ensureD3();
+  const root = clearContainer(container);
 
   if (!items.length) {
     container.appendChild(emptyState("No metrics are available yet."));
     return;
   }
 
-  items.forEach((item) => {
-    const card = document.createElement("div");
-    card.className = "stat-card";
-    card.innerHTML = `<h2>${item.label}</h2><div class="stat-value">${item.value}</div><p class="muted">${item.note}</p>`;
-    container.appendChild(card);
-  });
+  const cards = root.selectAll(".stat-card").data(items).enter().append("div").attr("class", "stat-card");
+  cards.append("h2").text((item) => item.label);
+  cards.append("div").attr("class", "stat-value").text((item) => item.value);
+  cards.append("p").attr("class", "muted").text((item) => item.note);
 }
 
 export function renderDualLineChart(container, series, options = {}) {
-  container.innerHTML = "";
-
+  ensureD3();
+  const root = clearContainer(container);
   const total = [...series.goodValues, ...series.badValues, ...(series.unknownValues || [])].reduce((sum, value) => sum + value, 0);
 
   if (!series.labels.length || total === 0) {
@@ -151,232 +213,161 @@ export function renderDualLineChart(container, series, options = {}) {
     return;
   }
 
-  const width = 720;
+  createLegend(root, [
+    { label: options.goodLabel || "Good", className: "green" },
+    { label: options.badLabel || "Bad", className: "" },
+    ...(series.unknownValues ? [{ label: options.unknownLabel || "Unknown", className: "soft" }] : [])
+  ]);
+
+  const width = 760;
   const height = 320;
-  const padding = { top: 28, right: 18, bottom: 82, left: 58 };
-  const plotWidth = width - padding.left - padding.right;
-  const plotHeight = height - padding.top - padding.bottom;
-  const yMax = options.yMax ?? 1;
+  const margin = { top: 16, right: 20, bottom: 64, left: 46 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
 
-  const buildPath = (values) =>
-    values
-      .map((value, index) => {
-        const x = padding.left + (series.labels.length === 1 ? plotWidth / 2 : (index / (series.labels.length - 1)) * plotWidth);
-        const y = padding.top + plotHeight - (Math.min(value, yMax) / yMax) * plotHeight;
-        return `${index === 0 ? "M" : "L"} ${x} ${y}`;
-      })
-      .join(" ");
+  const data = series.labels.map((label, index) => ({
+    label,
+    good: series.goodValues[index],
+    bad: series.badValues[index],
+    unknown: series.unknownValues ? series.unknownValues[index] : null
+  }));
 
-  const legend = document.createElement("div");
-  legend.className = "chart-legend";
-  legend.innerHTML = `
-    <span class="legend-item"><span class="legend-swatch green"></span>${options.goodLabel || "Good"}</span>
-    <span class="legend-item"><span class="legend-swatch"></span>${options.badLabel || "Bad"}</span>
-    ${series.unknownValues ? `<span class="legend-item"><span class="legend-swatch soft"></span>${options.unknownLabel || "Unknown"}</span>` : ""}
-  `;
+  const svg = createResponsiveSvg(root, width, height);
+  const chart = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  svg.setAttribute("class", "line-chart-svg");
+  const x = d3.scalePoint().domain(series.labels).range([0, innerWidth]);
+  const y = d3.scaleLinear().domain([0, options.yMax ?? 1]).nice().range([innerHeight, 0]);
 
-  for (let step = 0; step <= 4; step += 1) {
-    const ratio = step / 4;
-    const y = padding.top + plotHeight - ratio * plotHeight;
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("x1", String(padding.left));
-    line.setAttribute("x2", String(width - padding.right));
-    line.setAttribute("y1", String(y));
-    line.setAttribute("y2", String(y));
-    line.setAttribute("class", "line-grid");
-    svg.appendChild(line);
-
-    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    label.setAttribute("x", "10");
-    label.setAttribute("y", String(y + 4));
-    label.setAttribute("class", "line-axis-label");
-    label.textContent = (ratio * yMax).toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-    svg.appendChild(label);
-  }
-
-  const goodPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  goodPath.setAttribute("d", buildPath(series.goodValues));
-  goodPath.setAttribute("class", "line-path good");
-  svg.appendChild(goodPath);
-
-  const badPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  badPath.setAttribute("d", buildPath(series.badValues));
-  badPath.setAttribute("class", "line-path bad");
-  svg.appendChild(badPath);
-
-  if (series.unknownValues) {
-    const unknownPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    unknownPath.setAttribute("d", buildPath(series.unknownValues));
-    unknownPath.setAttribute("class", "line-path unknown");
-    svg.appendChild(unknownPath);
-  }
-
-  series.labels.forEach((labelText, index) => {
-    const x = padding.left + (series.labels.length === 1 ? plotWidth / 2 : (index / (series.labels.length - 1)) * plotWidth);
-
-    const points = [
-      { value: series.goodValues[index], className: "line-point good" },
-      { value: series.badValues[index], className: "line-point bad" }
-    ];
-
-    if (series.unknownValues) {
-      points.push({ value: series.unknownValues[index], className: "line-point unknown" });
-    }
-
-    points.forEach((point) => {
-      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      const y = padding.top + plotHeight - (Math.min(point.value, yMax) / yMax) * plotHeight;
-      circle.setAttribute("cx", String(x));
-      circle.setAttribute("cy", String(y));
-      circle.setAttribute("r", "4");
-      circle.setAttribute("class", point.className);
-      svg.appendChild(circle);
+  chart.append("g")
+    .attr("class", "chart-grid")
+    .call(d3.axisLeft(y).ticks(4).tickSize(-innerWidth).tickFormat(""))
+    .call((group) => {
+      group.select(".domain").remove();
+      group.selectAll("line").attr("stroke", "rgba(100, 91, 80, 0.12)");
     });
 
-    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    label.setAttribute("x", String(x));
-    label.setAttribute("y", String(height - 24));
-    label.setAttribute("text-anchor", "end");
-    label.setAttribute("transform", `rotate(-45 ${x} ${height - 24})`);
-    label.setAttribute("class", "line-axis-label");
-    label.textContent = labelText;
-    svg.appendChild(label);
+  chart.append("g")
+    .call(d3.axisLeft(y).ticks(4))
+    .call(applyAxisStyle);
+
+  chart.append("g")
+    .attr("transform", `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x))
+    .call(applyAxisStyle)
+    .selectAll("text")
+    .attr("transform", "rotate(-35)")
+    .style("text-anchor", "end");
+
+  const line = d3.line().x((item) => x(item.label)).y((item) => y(item.value));
+  const seriesDefs = [
+    { key: "good", className: "good", values: data.map((item) => ({ label: item.label, value: item.good })) },
+    { key: "bad", className: "bad", values: data.map((item) => ({ label: item.label, value: item.bad })) },
+    ...(series.unknownValues ? [{ key: "unknown", className: "unknown", values: data.map((item) => ({ label: item.label, value: item.unknown })) }] : [])
+  ];
+
+  seriesDefs.forEach((definition) => {
+    chart.append("path")
+      .datum(definition.values)
+      .attr("class", `line-path ${definition.className}`)
+      .attr("d", line);
+
+    chart.selectAll(`.line-point-${definition.key}`)
+      .data(definition.values)
+      .enter()
+      .append("circle")
+      .attr("class", `line-point ${definition.className}`)
+      .attr("cx", (item) => x(item.label))
+      .attr("cy", (item) => y(item.value))
+      .attr("r", 3.5);
   });
 
-  const yAxisTitle = document.createElementNS("http://www.w3.org/2000/svg", "text");
-  yAxisTitle.setAttribute("x", String(padding.left));
-  yAxisTitle.setAttribute("y", "16");
-  yAxisTitle.setAttribute("class", "line-axis-label");
-  yAxisTitle.textContent = options.yLabel || "Ratio";
-  svg.appendChild(yAxisTitle);
-
-  container.append(legend, svg);
+  svg.append("text")
+    .attr("x", margin.left)
+    .attr("y", 12)
+    .attr("class", "line-axis-label")
+    .text(options.yLabel || "Ratio");
 }
 
 export function renderGroupedBarChart(container, series, options = {}) {
-  container.innerHTML = "";
-
-  const total = [...series.goodValues, ...series.badValues].reduce((sum, value) => sum + value, 0);
+  ensureD3();
+  const root = clearContainer(container);
+  const total = [...series.goodValues, ...series.badValues, ...(series.unknownValues || [])].reduce((sum, value) => sum + value, 0);
 
   if (!series.labels.length || total === 0) {
     container.appendChild(emptyState(options.emptyMessage || "No data available."));
     return;
   }
 
-  const maxValue = Math.max(...series.goodValues, ...series.badValues, ...(series.unknownValues || []), 1);
-  const legend = document.createElement("div");
-  legend.className = "chart-legend";
-  legend.innerHTML = `
-    <span class="legend-item"><span class="legend-swatch green"></span>${options.goodLabel || "Good"}</span>
-    <span class="legend-item"><span class="legend-swatch"></span>${options.badLabel || "Bad"}</span>
-  `;
+  createLegend(root, [
+    { label: options.goodLabel || "Good", className: "green" },
+    { label: options.badLabel || "Bad", className: "" },
+    ...(series.unknownValues ? [{ label: options.unknownLabel || "Unknown", className: "soft" }] : [])
+  ]);
 
-  const width = 720;
-  const height = 320;
-  const padding = { top: 28, right: 12, bottom: 68, left: 58 };
-  const plotWidth = width - padding.left - padding.right;
-  const plotHeight = height - padding.top - padding.bottom;
-  const groupWidth = plotWidth / series.labels.length;
-  const seriesCount = series.unknownValues ? 3 : 2;
-  const clusterWidth = Math.max(groupWidth * 0.52, 14);
-  const barWidth = Math.min(18, Math.max(6, clusterWidth / seriesCount));
+  const width = 760;
+  const height = 340;
+  const margin = { top: 16, right: 20, bottom: 70, left: 46 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
 
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  svg.setAttribute("class", "bar-chart-svg");
+  const groupKeys = series.unknownValues ? ["good", "unknown", "bad"] : ["good", "bad"];
+  const labels = series.labels;
+  const data = labels.map((label, index) => ({
+    label,
+    good: series.goodValues[index],
+    bad: series.badValues[index],
+    unknown: series.unknownValues ? series.unknownValues[index] : 0
+  }));
 
-  for (let step = 0; step <= 4; step += 1) {
-    const ratio = step / 4;
-    const y = padding.top + plotHeight - ratio * plotHeight;
-    const gridLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    gridLine.setAttribute("x1", String(padding.left));
-    gridLine.setAttribute("x2", String(width - padding.right));
-    gridLine.setAttribute("y1", String(y));
-    gridLine.setAttribute("y2", String(y));
-    gridLine.setAttribute("class", "bar-grid");
-    svg.appendChild(gridLine);
+  const maxValue = d3.max(data, (item) => d3.max(groupKeys, (key) => item[key])) || 1;
+  const svg = createResponsiveSvg(root, width, height);
+  const chart = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-    const yLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    yLabel.setAttribute("x", "10");
-    yLabel.setAttribute("y", String(y + 4));
-    yLabel.setAttribute("class", "bar-axis-label");
-    yLabel.textContent = String(Math.round(ratio * maxValue));
-    svg.appendChild(yLabel);
-  }
+  const x0 = d3.scaleBand().domain(labels).range([0, innerWidth]).paddingInner(0.34).paddingOuter(0.05);
+  const x1 = d3.scaleBand().domain(groupKeys).range([0, x0.bandwidth()]).paddingInner(0.02).paddingOuter(0);
+  const y = d3.scaleLinear().domain([0, maxValue]).nice().range([innerHeight, 0]);
+  const fill = {
+    good: "#335c4b",
+    bad: "#a8481f",
+    unknown: "#c08b2d"
+  };
 
-  series.labels.forEach((label, index) => {
-    const groupLeft = padding.left + groupWidth * index;
-    const groupCenter = padding.left + groupWidth * index + groupWidth / 2;
-    const band = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    band.setAttribute("x", String(groupLeft + 1));
-    band.setAttribute("y", String(padding.top));
-    band.setAttribute("width", String(Math.max(groupWidth - 2, 0)));
-    band.setAttribute("height", String(plotHeight));
-    band.setAttribute("class", "bar-group-band");
-    if (index % 2 === 0) {
-      svg.appendChild(band);
-    }
-
-    const divider = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    divider.setAttribute("x1", String(groupLeft));
-    divider.setAttribute("x2", String(groupLeft));
-    divider.setAttribute("y1", String(padding.top));
-    divider.setAttribute("y2", String(padding.top + plotHeight));
-    divider.setAttribute("class", "bar-group-divider");
-    svg.appendChild(divider);
-
-    const bars = series.unknownValues
-      ? [
-          { value: series.goodValues[index], className: "good", offset: -barWidth, title: options.goodLabel || "Good" },
-          { value: series.unknownValues[index], className: "unknown", offset: 0, title: options.unknownLabel || "Unknown" },
-          { value: series.badValues[index], className: "bad", offset: barWidth, title: options.badLabel || "Bad" }
-        ]
-      : [
-          { value: series.goodValues[index], className: "good", offset: -barWidth / 2, title: options.goodLabel || "Good" },
-          { value: series.badValues[index], className: "bad", offset: barWidth / 2, title: options.badLabel || "Bad" }
-        ];
-
-    bars.forEach((barSpec) => {
-      const barHeight = (barSpec.value / maxValue) * plotHeight;
-      const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      rect.setAttribute("x", String(groupCenter + barSpec.offset - barWidth / 2));
-      rect.setAttribute("y", String(padding.top + plotHeight - barHeight));
-      rect.setAttribute("width", String(barWidth));
-      rect.setAttribute("height", String(Math.max(barHeight, 1)));
-      rect.setAttribute("rx", "4");
-      rect.setAttribute("class", `bar-rect ${barSpec.className}`);
-      rect.setAttribute("title", `${barSpec.title}: ${barSpec.value}`);
-      svg.appendChild(rect);
+  chart.append("g")
+    .attr("class", "chart-grid")
+    .call(d3.axisLeft(y).ticks(4).tickSize(-innerWidth).tickFormat(""))
+    .call((group) => {
+      group.select(".domain").remove();
+      group.selectAll("line").attr("stroke", "rgba(100, 91, 80, 0.12)");
     });
 
-    const xLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    xLabel.setAttribute("x", String(groupCenter));
-    xLabel.setAttribute("y", String(height - 10));
-    xLabel.setAttribute("text-anchor", "middle");
-    xLabel.setAttribute("transform", `rotate(-35 ${groupCenter} ${height - 10})`);
-    xLabel.setAttribute("class", "bar-axis-label");
-    xLabel.textContent = label;
-    svg.appendChild(xLabel);
-  });
+  chart.append("g")
+    .call(d3.axisLeft(y).ticks(4))
+    .call(applyAxisStyle);
 
-  const endDivider = document.createElementNS("http://www.w3.org/2000/svg", "line");
-  endDivider.setAttribute("x1", String(width - padding.right));
-  endDivider.setAttribute("x2", String(width - padding.right));
-  endDivider.setAttribute("y1", String(padding.top));
-  endDivider.setAttribute("y2", String(padding.top + plotHeight));
-  endDivider.setAttribute("class", "bar-group-divider");
-  svg.appendChild(endDivider);
+  chart.append("g")
+    .attr("transform", `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x0))
+    .call(applyAxisStyle)
+    .selectAll("text")
+    .attr("transform", "rotate(-35)")
+    .style("text-anchor", "end");
 
-  const yAxisTitle = document.createElementNS("http://www.w3.org/2000/svg", "text");
-  yAxisTitle.setAttribute("x", String(padding.left));
-  yAxisTitle.setAttribute("y", "16");
-  yAxisTitle.setAttribute("class", "bar-axis-label");
-  yAxisTitle.textContent = options.yLabel || "Count";
-  svg.appendChild(yAxisTitle);
+  const groups = chart.selectAll(".group").data(data).enter().append("g").attr("transform", (item) => `translate(${x0(item.label)},0)`);
 
-  container.append(legend, svg);
+  groups.selectAll("rect")
+    .data((item) => groupKeys.map((key) => ({ key, value: item[key] })))
+    .enter()
+    .append("rect")
+    .attr("x", (item) => x1(item.key))
+    .attr("y", (item) => y(item.value))
+    .attr("width", x1.bandwidth())
+    .attr("height", (item) => innerHeight - y(item.value))
+    .attr("rx", 3)
+    .attr("fill", (item) => fill[item.key]);
+
+  svg.append("text")
+    .attr("x", margin.left)
+    .attr("y", 12)
+    .attr("class", "bar-axis-label")
+    .text(options.yLabel || "Count");
 }

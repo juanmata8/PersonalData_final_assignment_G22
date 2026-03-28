@@ -9,6 +9,8 @@ LLM Coding Explorer is a Chrome Manifest V3 browser extension that helps users i
 
 All imported and captured records are stored in a ChatGPT-style conversation export format, then normalized into interaction pairs for analysis.
 
+The extension renders its visualizations with a local vendored D3.js bundle included in the extension package, rather than loading chart code from a CDN.
+
 ## Data Flow
 
 ### 1. JSON conversation import
@@ -108,8 +110,8 @@ The extension only visualizes coding-related interactions. Non-coding conversati
 
 For the prompt-quality charts:
 
-- `good` means offloading-oriented coding prompts
-- `bad` means explanation-oriented coding prompts
+- `good` means explanation-oriented coding prompts that support learning
+- `bad` means offloading-oriented coding prompts where the model is asked to carry out the work
 - `unknown` means coding-related prompts without a clear offloading classification
 - the ratio line chart shows the share of `good`, `bad`, and `unknown` prompts in each time bucket
 - the grouped count chart shows raw counts for `good`, `bad`, and `unknown`

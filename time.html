@@ -55,7 +55,7 @@
           <input id="timeRangeEnd" type="date">
         </div>
       </div>
-      <p class="muted">Good prompts are offloading-oriented coding prompts. Bad prompts are explanation-oriented coding prompts. Unknown prompts are coding-related prompts without a clear offloading classification. The ratio chart shows the share of each category within each selected period.</p>
+      <p class="muted">Good prompts are explanation-oriented coding prompts that support learning. Bad prompts are offloading-oriented coding prompts that ask the model to do the work for you. Unknown prompts are coding-related prompts without a clear offloading classification. The ratio chart shows the share of each category within each selected period.</p>
     </section>
 
     <section class="stack">
@@ -88,11 +88,12 @@
           Unknown prompts
         </label>
       </div>
-      <p class="muted">Good prompts are offloading-oriented coding prompts. Bad prompts are explanation-oriented coding prompts. Unknown prompts are coding-related prompts without a clear offloading classification. The heatmap reflects whichever categories are selected.</p>
+      <p class="muted">Good prompts are explanation-oriented coding prompts that support learning. Bad prompts are offloading-oriented coding prompts that ask the model to do the work for you. Unknown prompts are coding-related prompts without a clear offloading classification. The heatmap reflects whichever categories are selected.</p>
       <div id="hourlyHeatmap"></div>
     </section>
   </main>
 
+  <script src="vendor/d3.min.js"></script>
   <script type="module" src="src/time-page.js"></script>
 </body>
 </html>

@@ -416,6 +416,18 @@ a {
   background: linear-gradient(90deg, var(--green), #5a9078);
 }
 
+svg .chart-bar-fill {
+  fill: var(--accent);
+}
+
+svg .chart-bar-fill.green {
+  fill: var(--green);
+}
+
+svg .chart-bar-track-bg {
+  fill: rgba(194, 176, 152, 0.18);
+}
+
 .heat-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
