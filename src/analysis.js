@@ -599,14 +599,11 @@ function buildPromptQualitySeries(interactions, axisMode) {
   const buckets = labels.map((label) => ({
     label,
     good: 0,
-    bad: 0
+    bad: 0,
+    unknown: 0
   }));
 
   interactions.forEach((interaction) => {
-    if (interaction.offloadingLabel !== "offloading" && interaction.offloadingLabel !== "non_offloading") {
-      return;
-    }
-
     const date = new Date(interaction.timestamp);
     if (Number.isNaN(date.getTime())) {
       return;
@@ -618,8 +615,10 @@ function buildPromptQualitySeries(interactions, axisMode) {
 
     if (interaction.offloadingLabel === "offloading") {
       buckets[bucketIndex].good += 1;
-    } else {
+    } else if (interaction.offloadingLabel === "non_offloading") {
       buckets[bucketIndex].bad += 1;
+    } else {
+      buckets[bucketIndex].unknown += 1;
     }
   });
 
@@ -627,13 +626,18 @@ function buildPromptQualitySeries(interactions, axisMode) {
     labels,
     goodCounts: buckets.map((bucket) => bucket.good),
     badCounts: buckets.map((bucket) => bucket.bad),
+    unknownCounts: buckets.map((bucket) => bucket.unknown),
     goodRatios: buckets.map((bucket) => {
-      const total = bucket.good + bucket.bad;
+      const total = bucket.good + bucket.bad + bucket.unknown;
       return total ? bucket.good / total : 0;
     }),
     badRatios: buckets.map((bucket) => {
-      const total = bucket.good + bucket.bad;
+      const total = bucket.good + bucket.bad + bucket.unknown;
       return total ? bucket.bad / total : 0;
+    }),
+    unknownRatios: buckets.map((bucket) => {
+      const total = bucket.good + bucket.bad + bucket.unknown;
+      return total ? bucket.unknown / total : 0;
     })
   };
 }
@@ -641,14 +645,15 @@ function buildPromptQualitySeries(interactions, axisMode) {
 function buildFilteredHourlyCounts(interactions, filters = {}) {
   const includeGood = filters.includeGood !== false;
   const includeBad = filters.includeBad !== false;
+  const includeUnknown = filters.includeUnknown !== false;
   const counts = {};
 
   interactions.forEach((interaction) => {
     const label = interaction.offloadingLabel;
     const includeInteraction =
-      (includeGood && includeBad) ||
       (includeGood && label === "offloading") ||
-      (includeBad && label === "non_offloading");
+      (includeBad && label === "non_offloading") ||
+      (includeUnknown && label === "unknown");
 
     if (!includeInteraction) {
       return;
@@ -743,16 +748,19 @@ export function buildTimePatternDetail(conversations, options = {}) {
     qualitySeries: {
       labels: series.labels,
       goodValues: series.goodRatios,
-      badValues: series.badRatios
+      badValues: series.badRatios,
+      unknownValues: series.unknownRatios
     },
     qualityCountSeries: {
       labels: series.labels,
       goodValues: series.goodCounts,
-      badValues: series.badCounts
+      badValues: series.badCounts,
+      unknownValues: series.unknownCounts
     },
     filteredHourlyCounts: buildFilteredHourlyCounts(filtered, {
       includeGood: options.includeGood,
-      includeBad: options.includeBad
+      includeBad: options.includeBad,
+      includeUnknown: options.includeUnknown
     })
   };
 }

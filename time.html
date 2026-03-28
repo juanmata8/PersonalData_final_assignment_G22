@@ -37,7 +37,7 @@
 
     <section class="panel">
       <p class="eyebrow">Prompt Quality Patterns</p>
-      <h2>Good vs bad prompt behavior over time</h2>
+      <h2>Prompt quality ratios over time</h2>
       <div class="form-grid">
         <div class="field">
           <label for="timeAxisMode">X-axis grouping</label>
@@ -55,13 +55,13 @@
           <input id="timeRangeEnd" type="date">
         </div>
       </div>
-      <p class="muted">Good prompts are offloading-oriented coding prompts. Bad prompts are explanation-oriented coding prompts. Unknown prompts are excluded from these two charts.</p>
+      <p class="muted">Good prompts are offloading-oriented coding prompts. Bad prompts are explanation-oriented coding prompts. Unknown prompts are coding-related prompts without a clear offloading classification. The ratio chart shows the share of each category within each selected period.</p>
     </section>
 
     <section class="stack">
       <article class="panel">
         <p class="eyebrow">Ratio</p>
-        <h2>Bad vs good ratio by selected period</h2>
+        <h2>Good, bad, and unknown ratios by selected period</h2>
         <div id="qualityRatioChart"></div>
       </article>
       <article class="panel">
@@ -83,8 +83,12 @@
           <input id="heatmapBadToggle" type="checkbox" checked>
           Bad prompts
         </label>
+        <label class="badge">
+          <input id="heatmapUnknownToggle" type="checkbox" checked>
+          Unknown prompts
+        </label>
       </div>
-      <p class="muted">Good prompts are offloading-oriented coding prompts. Bad prompts are explanation-oriented coding prompts. If both are selected, the heatmap shows both together.</p>
+      <p class="muted">Good prompts are offloading-oriented coding prompts. Bad prompts are explanation-oriented coding prompts. Unknown prompts are coding-related prompts without a clear offloading classification. The heatmap reflects whichever categories are selected.</p>
       <div id="hourlyHeatmap"></div>
     </section>
   </main>

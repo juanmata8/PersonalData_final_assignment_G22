@@ -15,6 +15,7 @@ const timeRangeStart = document.getElementById("timeRangeStart");
 const timeRangeEnd = document.getElementById("timeRangeEnd");
 const heatmapGoodToggle = document.getElementById("heatmapGoodToggle");
 const heatmapBadToggle = document.getElementById("heatmapBadToggle");
+const heatmapUnknownToggle = document.getElementById("heatmapUnknownToggle");
 
 let conversationsCache = [];
 
@@ -48,7 +49,8 @@ async function renderPage() {
     startDate: timeRangeStart.value,
     endDate: timeRangeEnd.value,
     includeGood: heatmapGoodToggle.checked,
-    includeBad: heatmapBadToggle.checked
+    includeBad: heatmapBadToggle.checked,
+    includeUnknown: heatmapUnknownToggle.checked
   });
 
   syncDateInputs(detail);
@@ -67,11 +69,15 @@ async function renderPage() {
     yMax: 1,
     goodLabel: "Good prompts",
     badLabel: "Bad prompts",
-    emptyMessage: "No offloading-labeled coding prompts are available in the selected interval."
+    unknownLabel: "Unknown prompts",
+    yLabel: "Ratio",
+    emptyMessage: "No coding prompts are available in the selected interval."
   });
   renderGroupedBarChart(qualityCountChart, detail.qualityCountSeries, {
     goodLabel: "Good",
     badLabel: "Bad",
+    unknownLabel: "Unknown",
+    yLabel: "Count",
     emptyMessage: "No offloading-labeled coding prompts are available in the selected interval."
   });
 }
@@ -90,6 +96,9 @@ async function renderPage() {
     void renderPage();
   });
   heatmapBadToggle.addEventListener(eventName, () => {
+    void renderPage();
+  });
+  heatmapUnknownToggle.addEventListener(eventName, () => {
     void renderPage();
   });
 });

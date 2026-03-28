@@ -144,7 +144,7 @@ export function renderMetricList(container, items) {
 export function renderDualLineChart(container, series, options = {}) {
   container.innerHTML = "";
 
-  const total = [...series.goodValues, ...series.badValues].reduce((sum, value) => sum + value, 0);
+  const total = [...series.goodValues, ...series.badValues, ...(series.unknownValues || [])].reduce((sum, value) => sum + value, 0);
 
   if (!series.labels.length || total === 0) {
     container.appendChild(emptyState(options.emptyMessage || "No data available."));
@@ -152,8 +152,8 @@ export function renderDualLineChart(container, series, options = {}) {
   }
 
   const width = 720;
-  const height = 280;
-  const padding = { top: 24, right: 16, bottom: 42, left: 44 };
+  const height = 320;
+  const padding = { top: 28, right: 18, bottom: 82, left: 58 };
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
   const yMax = options.yMax ?? 1;
@@ -172,6 +172,7 @@ export function renderDualLineChart(container, series, options = {}) {
   legend.innerHTML = `
     <span class="legend-item"><span class="legend-swatch green"></span>${options.goodLabel || "Good"}</span>
     <span class="legend-item"><span class="legend-swatch"></span>${options.badLabel || "Bad"}</span>
+    ${series.unknownValues ? `<span class="legend-item"><span class="legend-swatch soft"></span>${options.unknownLabel || "Unknown"}</span>` : ""}
   `;
 
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -190,7 +191,7 @@ export function renderDualLineChart(container, series, options = {}) {
     svg.appendChild(line);
 
     const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    label.setAttribute("x", "8");
+    label.setAttribute("x", "10");
     label.setAttribute("y", String(y + 4));
     label.setAttribute("class", "line-axis-label");
     label.textContent = (ratio * yMax).toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
@@ -207,13 +208,26 @@ export function renderDualLineChart(container, series, options = {}) {
   badPath.setAttribute("class", "line-path bad");
   svg.appendChild(badPath);
 
+  if (series.unknownValues) {
+    const unknownPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    unknownPath.setAttribute("d", buildPath(series.unknownValues));
+    unknownPath.setAttribute("class", "line-path unknown");
+    svg.appendChild(unknownPath);
+  }
+
   series.labels.forEach((labelText, index) => {
     const x = padding.left + (series.labels.length === 1 ? plotWidth / 2 : (index / (series.labels.length - 1)) * plotWidth);
 
-    [
+    const points = [
       { value: series.goodValues[index], className: "line-point good" },
       { value: series.badValues[index], className: "line-point bad" }
-    ].forEach((point) => {
+    ];
+
+    if (series.unknownValues) {
+      points.push({ value: series.unknownValues[index], className: "line-point unknown" });
+    }
+
+    points.forEach((point) => {
       const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
       const y = padding.top + plotHeight - (Math.min(point.value, yMax) / yMax) * plotHeight;
       circle.setAttribute("cx", String(x));
@@ -225,12 +239,20 @@ export function renderDualLineChart(container, series, options = {}) {
 
     const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
     label.setAttribute("x", String(x));
-    label.setAttribute("y", String(height - 12));
-    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("y", String(height - 24));
+    label.setAttribute("text-anchor", "end");
+    label.setAttribute("transform", `rotate(-45 ${x} ${height - 24})`);
     label.setAttribute("class", "line-axis-label");
     label.textContent = labelText;
     svg.appendChild(label);
   });
+
+  const yAxisTitle = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  yAxisTitle.setAttribute("x", String(padding.left));
+  yAxisTitle.setAttribute("y", "16");
+  yAxisTitle.setAttribute("class", "line-axis-label");
+  yAxisTitle.textContent = options.yLabel || "Ratio";
+  svg.appendChild(yAxisTitle);
 
   container.append(legend, svg);
 }
@@ -245,7 +267,7 @@ export function renderGroupedBarChart(container, series, options = {}) {
     return;
   }
 
-  const maxValue = Math.max(...series.goodValues, ...series.badValues, 1);
+  const maxValue = Math.max(...series.goodValues, ...series.badValues, ...(series.unknownValues || []), 1);
   const legend = document.createElement("div");
   legend.className = "chart-legend";
   legend.innerHTML = `
@@ -255,11 +277,13 @@ export function renderGroupedBarChart(container, series, options = {}) {
 
   const width = 720;
   const height = 320;
-  const padding = { top: 20, right: 12, bottom: 52, left: 48 };
+  const padding = { top: 28, right: 12, bottom: 68, left: 58 };
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
   const groupWidth = plotWidth / series.labels.length;
-  const barWidth = Math.min(20, Math.max(8, groupWidth * 0.28));
+  const seriesCount = series.unknownValues ? 3 : 2;
+  const clusterWidth = Math.max(groupWidth * 0.52, 14);
+  const barWidth = Math.min(18, Math.max(6, clusterWidth / seriesCount));
 
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
@@ -285,11 +309,36 @@ export function renderGroupedBarChart(container, series, options = {}) {
   }
 
   series.labels.forEach((label, index) => {
+    const groupLeft = padding.left + groupWidth * index;
     const groupCenter = padding.left + groupWidth * index + groupWidth / 2;
-    const bars = [
-      { value: series.goodValues[index], className: "good", offset: -barWidth / 2 - 2, title: options.goodLabel || "Good" },
-      { value: series.badValues[index], className: "bad", offset: barWidth / 2 + 2, title: options.badLabel || "Bad" }
-    ];
+    const band = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    band.setAttribute("x", String(groupLeft + 1));
+    band.setAttribute("y", String(padding.top));
+    band.setAttribute("width", String(Math.max(groupWidth - 2, 0)));
+    band.setAttribute("height", String(plotHeight));
+    band.setAttribute("class", "bar-group-band");
+    if (index % 2 === 0) {
+      svg.appendChild(band);
+    }
+
+    const divider = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    divider.setAttribute("x1", String(groupLeft));
+    divider.setAttribute("x2", String(groupLeft));
+    divider.setAttribute("y1", String(padding.top));
+    divider.setAttribute("y2", String(padding.top + plotHeight));
+    divider.setAttribute("class", "bar-group-divider");
+    svg.appendChild(divider);
+
+    const bars = series.unknownValues
+      ? [
+          { value: series.goodValues[index], className: "good", offset: -barWidth, title: options.goodLabel || "Good" },
+          { value: series.unknownValues[index], className: "unknown", offset: 0, title: options.unknownLabel || "Unknown" },
+          { value: series.badValues[index], className: "bad", offset: barWidth, title: options.badLabel || "Bad" }
+        ]
+      : [
+          { value: series.goodValues[index], className: "good", offset: -barWidth / 2, title: options.goodLabel || "Good" },
+          { value: series.badValues[index], className: "bad", offset: barWidth / 2, title: options.badLabel || "Bad" }
+        ];
 
     bars.forEach((barSpec) => {
       const barHeight = (barSpec.value / maxValue) * plotHeight;
@@ -306,16 +355,25 @@ export function renderGroupedBarChart(container, series, options = {}) {
 
     const xLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
     xLabel.setAttribute("x", String(groupCenter));
-    xLabel.setAttribute("y", String(height - 16));
+    xLabel.setAttribute("y", String(height - 10));
     xLabel.setAttribute("text-anchor", "middle");
+    xLabel.setAttribute("transform", `rotate(-35 ${groupCenter} ${height - 10})`);
     xLabel.setAttribute("class", "bar-axis-label");
     xLabel.textContent = label;
     svg.appendChild(xLabel);
   });
 
+  const endDivider = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  endDivider.setAttribute("x1", String(width - padding.right));
+  endDivider.setAttribute("x2", String(width - padding.right));
+  endDivider.setAttribute("y1", String(padding.top));
+  endDivider.setAttribute("y2", String(padding.top + plotHeight));
+  endDivider.setAttribute("class", "bar-group-divider");
+  svg.appendChild(endDivider);
+
   const yAxisTitle = document.createElementNS("http://www.w3.org/2000/svg", "text");
-  yAxisTitle.setAttribute("x", "18");
-  yAxisTitle.setAttribute("y", String(padding.top - 2));
+  yAxisTitle.setAttribute("x", String(padding.left));
+  yAxisTitle.setAttribute("y", "16");
   yAxisTitle.setAttribute("class", "bar-axis-label");
   yAxisTitle.textContent = options.yLabel || "Count";
   svg.appendChild(yAxisTitle);

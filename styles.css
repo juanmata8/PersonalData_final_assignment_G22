@@ -456,7 +456,7 @@ a {
 
 .line-axis-label {
   fill: var(--muted);
-  font-size: 12px;
+  font-size: 10px;
 }
 
 .line-grid {
@@ -477,12 +477,20 @@ a {
   stroke: var(--accent);
 }
 
+.line-path.unknown {
+  stroke: var(--gold);
+}
+
 .line-point.good {
   fill: var(--green);
 }
 
 .line-point.bad {
   fill: var(--accent);
+}
+
+.line-point.unknown {
+  fill: var(--gold);
 }
 
 .bar-chart-svg {
@@ -493,11 +501,20 @@ a {
 
 .bar-axis-label {
   fill: var(--muted);
-  font-size: 12px;
+  font-size: 10px;
 }
 
 .bar-grid {
   stroke: rgba(100, 91, 80, 0.18);
+  stroke-width: 1;
+}
+
+.bar-group-band {
+  fill: rgba(194, 176, 152, 0.08);
+}
+
+.bar-group-divider {
+  stroke: rgba(100, 91, 80, 0.1);
   stroke-width: 1;
 }
 
@@ -507,6 +524,10 @@ a {
 
 .bar-rect.bad {
   fill: var(--accent);
+}
+
+.bar-rect.unknown {
+  fill: var(--gold);
 }
 
 .word-pill {

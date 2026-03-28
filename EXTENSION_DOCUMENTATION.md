@@ -101,16 +101,18 @@ The time patterns page derives local charts from normalized timestamps:
 - daily interaction count
 - hour-of-day heatmap
 - day-of-week bar chart
-- bad-vs-good ratio line chart by hour of day or day of week
-- bad/good grouped count chart by hour of day or day of week
+- good/bad/unknown ratio line chart by hour of day or day of week
+- good/bad/unknown grouped count chart by hour of day or day of week
 
 The extension only visualizes coding-related interactions. Non-coding conversations may still exist in stored exports, but they are excluded from the analytical views and score.
 
-For the two prompt-quality charts:
+For the prompt-quality charts:
 
 - `good` means offloading-oriented coding prompts
 - `bad` means explanation-oriented coding prompts
-- prompts labeled `unknown` are excluded from those two charts
+- `unknown` means coding-related prompts without a clear offloading classification
+- the ratio line chart shows the share of `good`, `bad`, and `unknown` prompts in each time bucket
+- the grouped count chart shows raw counts for `good`, `bad`, and `unknown`
 
 Both prompt-quality charts support:
 
