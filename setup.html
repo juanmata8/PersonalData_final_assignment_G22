@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LLM Coding Explorer | Setup</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="app-shell">
+  <main class="app-layout stack">
+    <header class="topbar">
+      <div class="brand">
+        <p class="eyebrow">Setup</p>
+        <h1>Configure Your Dataset</h1>
+        <p>Import historical LLM data, toggle live capture, and inspect what is stored locally.</p>
+      </div>
+      <nav class="nav">
+        <a class="nav-link" data-page="setup" href="setup.html">Setup</a>
+        <a class="nav-link" data-page="time" href="time.html">Time Patterns</a>
+        <a class="nav-link" data-page="categories" href="categories.html">Categories</a>
+        <a class="nav-link" data-page="summary" href="summary.html">Summary</a>
+      </nav>
+    </header>
+
+    <section class="grid three" id="snapshotCards"></section>
+
+    <section class="grid two">
+      <article class="panel">
+        <p class="eyebrow">JSON Import</p>
+        <h2>Upload a `conversations.json` export</h2>
+        <p class="muted">The importer expects the ChatGPT-style conversation export structure with a top-level array of conversation objects and a `mapping` tree.</p>
+        <div class="stack">
+          <div class="field">
+            <label for="csvFile">JSON file</label>
+            <input id="csvFile" type="file" accept=".json,application/json">
+          </div>
+          <div class="button-row">
+            <button id="importBtn" class="primary" disabled>Import conversation file</button>
+          </div>
+          <div id="importStatus" class="status-text"></div>
+        </div>
+      </article>
+
+      <article class="panel">
+        <p class="eyebrow">Live Sources</p>
+        <h2>Enable background capture</h2>
+        <div id="sourceList" class="source-list"></div>
+        <div class="button-row">
+          <button id="resetBtn" class="warn">Reset local dataset</button>
+        </div>
+        <div id="resetStatus" class="status-text"></div>
+      </article>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Preview</p>
+      <h2>Conversation preview</h2>
+      <div id="previewWrap" class="preview-wrap">
+        <div class="empty-state">Upload a `conversations.json` file to preview conversation metadata before import.</div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="src/setup-page.js"></script>
+</body>
+</html>

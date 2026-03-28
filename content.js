@@ -1,85 +1,222 @@
 (() => {
   const api = typeof browser !== "undefined" ? browser : chrome;
-  const STORAGE_KEY = "capturedPrompts";
-  const MAX_ITEMS = 500;
 
-  let lastCapturedText = "";
-  let lastCapturedAt = 0;
+  const SITE_CONFIGS = {
+    chatgpt: {
+      hostPatterns: ["chatgpt.com", "chat.openai.com"],
+      composerSelectors: [
+        "textarea#prompt-textarea",
+        "#prompt-textarea[contenteditable='true']",
+        "div#prompt-textarea",
+        "div[contenteditable='true']"
+      ],
+      sendButtonSelectors: [
+        "button[data-testid='send-button']",
+        "button[aria-label*='Send']"
+      ],
+      assistantSelectors: [
+        "[data-message-author-role='assistant']",
+        "[data-testid*='conversation-turn'] [data-message-author-role='assistant']"
+      ]
+    },
+    claude: {
+      hostPatterns: ["claude.ai"],
+      composerSelectors: [
+        "div[contenteditable='true']",
+        "textarea"
+      ],
+      sendButtonSelectors: [
+        "button[aria-label*='Send']",
+        "button[data-testid*='send']"
+      ],
+      assistantSelectors: [
+        "[data-testid='assistant-message']",
+        "[data-is-streaming]",
+        "[data-testid*='message']"
+      ]
+    },
+    gemini: {
+      hostPatterns: ["gemini.google.com"],
+      composerSelectors: [
+        "textarea",
+        "div[contenteditable='true']"
+      ],
+      sendButtonSelectors: [
+        "button[aria-label*='Send']",
+        "button[mattooltip*='Send']"
+      ],
+      assistantSelectors: [
+        "message-content",
+        ".model-response-text",
+        "[data-test-id='response-content']"
+      ]
+    }
+  };
 
-  function normalize(text) {
-    return (text || "").replace(/\s+/g, " ").trim();
+  const siteKey = Object.entries(SITE_CONFIGS).find(([, config]) =>
+    config.hostPatterns.some((pattern) => location.hostname.includes(pattern))
+  )?.[0];
+
+  if (!siteKey) {
+    return;
+  }
+
+  const config = SITE_CONFIGS[siteKey];
+  let lastSubmissionSignature = "";
+  let pendingCapture = null;
+  let responsePollTimer = null;
+  let stabilityCounter = 0;
+  let lastResponseCandidate = "";
+
+  function normalizeText(value) {
+    return (value || "").replace(/\s+/g, " ").trim();
+  }
+
+  function getTextFromElement(element) {
+    if (!element) {
+      return "";
+    }
+
+    if (element instanceof HTMLTextAreaElement) {
+      return element.value || "";
+    }
+
+    return element.innerText || element.textContent || "";
+  }
+
+  function queryFirst(selectors) {
+    for (const selector of selectors) {
+      const match = document.querySelector(selector);
+      if (match) {
+        return match;
+      }
+    }
+    return null;
+  }
+
+  function queryAll(selectors) {
+    for (const selector of selectors) {
+      const matches = Array.from(document.querySelectorAll(selector));
+      if (matches.length) {
+        return matches;
+      }
+    }
+    return [];
   }
 
   function getComposerText() {
-    const textarea = document.querySelector("textarea#prompt-textarea");
-    if (textarea && textarea.value) {
-      return textarea.value;
-    }
-
-    const editable = document.querySelector("#prompt-textarea[contenteditable='true'], div#prompt-textarea");
-    if (editable) {
-      return editable.innerText || editable.textContent || "";
-    }
-
-    const fallbackEditable = document.querySelector("div[contenteditable='true']");
-    if (fallbackEditable) {
-      return fallbackEditable.innerText || fallbackEditable.textContent || "";
-    }
-
-    return "";
+    const composer = queryFirst(config.composerSelectors);
+    return normalizeText(getTextFromElement(composer));
   }
 
-  function shouldSkip(text) {
-    const now = Date.now();
-    if (!text) {
-      return true;
+  function getLatestAssistantResponse() {
+    const nodes = queryAll(config.assistantSelectors);
+    const texts = nodes
+      .map((node) => normalizeText(getTextFromElement(node)))
+      .filter(Boolean);
+
+    if (!texts.length) {
+      return "";
     }
 
-    if (text === lastCapturedText && now - lastCapturedAt < 1200) {
-      return true;
-    }
-
-    lastCapturedText = text;
-    lastCapturedAt = now;
-    return false;
+    return texts[texts.length - 1];
   }
 
-  async function savePrompt(text, trigger) {
-    const cleanText = normalize(text);
-    if (shouldSkip(cleanText)) {
+  function stopPolling() {
+    if (responsePollTimer) {
+      clearInterval(responsePollTimer);
+      responsePollTimer = null;
+    }
+  }
+
+  function deliverCapture(responseText, reason) {
+    if (!pendingCapture) {
       return;
     }
 
     const payload = {
-      text: cleanText,
-      trigger,
+      source: siteKey,
+      promptText: pendingCapture.promptText,
+      responseText: normalizeText(responseText),
       url: location.href,
-      timestamp: new Date().toISOString()
+      timestamp: pendingCapture.timestamp,
+      trigger: pendingCapture.trigger,
+      captureReason: reason
     };
 
-    try {
-      const result = await api.storage.local.get(STORAGE_KEY);
-      const existing = Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
-      const next = [...existing, payload].slice(-MAX_ITEMS);
-      await api.storage.local.set({ [STORAGE_KEY]: next });
-    } catch (error) {
-      console.error("Prompt logger failed to save prompt", error);
+    api.runtime.sendMessage({ type: "captureInteraction", payload }, () => {
+      void api.runtime.lastError;
+    });
+
+    pendingCapture = null;
+    stopPolling();
+    stabilityCounter = 0;
+    lastResponseCandidate = "";
+  }
+
+  function beginResponsePolling() {
+    stopPolling();
+    stabilityCounter = 0;
+    lastResponseCandidate = "";
+
+    responsePollTimer = window.setInterval(() => {
+      if (!pendingCapture) {
+        stopPolling();
+        return;
+      }
+
+      const elapsed = Date.now() - pendingCapture.startedAt;
+      const responseText = getLatestAssistantResponse();
+
+      if (responseText && responseText === lastResponseCandidate) {
+        stabilityCounter += 1;
+      } else if (responseText) {
+        stabilityCounter = 1;
+        lastResponseCandidate = responseText;
+      }
+
+      if (responseText && stabilityCounter >= 2) {
+        deliverCapture(responseText, "stable-response");
+        return;
+      }
+
+      if (elapsed > 20000) {
+        deliverCapture(responseText, "timeout");
+      }
+    }, 1500);
+  }
+
+  function queueCapture(trigger) {
+    const promptText = getComposerText();
+    const cleanPrompt = normalizeText(promptText);
+    if (!cleanPrompt) {
+      return;
     }
+
+    const signature = `${cleanPrompt}::${Math.floor(Date.now() / 1000)}`;
+    if (signature === lastSubmissionSignature) {
+      return;
+    }
+
+    lastSubmissionSignature = signature;
+    pendingCapture = {
+      promptText: cleanPrompt,
+      trigger,
+      timestamp: new Date().toISOString(),
+      startedAt: Date.now()
+    };
+
+    beginResponsePolling();
   }
 
   document.addEventListener(
     "submit",
     (event) => {
-      const form = event.target;
-      if (!(form instanceof HTMLFormElement)) {
+      const target = event.target;
+      if (!(target instanceof HTMLFormElement)) {
         return;
       }
-
-      if (!form.closest("main")) {
-        return;
-      }
-
-      savePrompt(getComposerText(), "submit");
+      queueCapture("submit");
     },
     true
   );
@@ -92,12 +229,12 @@
         return;
       }
 
-      const sendButton = target.closest("button[data-testid='send-button']");
+      const sendButton = config.sendButtonSelectors.some((selector) => target.closest(selector));
       if (!sendButton) {
         return;
       }
 
-      savePrompt(getComposerText(), "button");
+      queueCapture("button");
     },
     true
   );
@@ -114,12 +251,12 @@
         return;
       }
 
-      const inPromptEditor = target.closest("#prompt-textarea, textarea#prompt-textarea");
-      if (!inPromptEditor) {
+      const composer = queryFirst(config.composerSelectors);
+      if (!composer || !composer.contains(target) && composer !== target) {
         return;
       }
 
-      savePrompt(getComposerText(), "enter");
+      queueCapture("enter");
     },
     true
   );

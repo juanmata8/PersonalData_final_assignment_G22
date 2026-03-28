@@ -1,29 +1,37 @@
 {
-	"manifest_version": 3,
-	"name": "ChatGPT Prompt Logger (Local)",
-	"description": "Captures prompts you send on ChatGPT and stores them locally in your browser.",
-	"version": "1.0.0",
-	"permissions": [
-		"storage"
-	],
-	"host_permissions": [
-		"https://chatgpt.com/*",
-		"https://chat.openai.com/*"
-	],
-	"content_scripts": [
-		{
-			"matches": [
-				"https://chatgpt.com/*",
-				"https://chat.openai.com/*"
-			],
-			"js": [
-				"content.js"
-			],
-			"run_at": "document_idle"
-		}
-	],
-	"action": {
-		"default_popup": "index.html",
-		"default_title": "Prompt Logger"
-	}
+  "manifest_version": 3,
+  "name": "LLM Coding Explorer",
+  "description": "Analyze coding-related LLM prompts, responses, time patterns, and cognitive offloading behavior locally in your browser.",
+  "version": "1.0.0",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://claude.ai/*",
+    "https://gemini.google.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "LLM Coding Explorer"
+  }
 }

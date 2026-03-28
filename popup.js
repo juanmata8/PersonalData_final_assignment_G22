@@ -1,96 +1,72 @@
-const api = typeof browser !== "undefined" ? browser : chrome;
-const STORAGE_KEY = "capturedPrompts";
+const pages = [
+  { id: "openSetup", path: "setup.html" },
+  { id: "openTime", path: "time.html" },
+  { id: "openCategories", path: "categories.html" },
+  { id: "openSummary", path: "summary.html" }
+];
 
-const listEl = document.getElementById("list");
+const STORAGE_KEYS = {
+  conversations: "llmCodingExplorer.conversations",
+  sourceSettings: "llmCodingExplorer.sourceSettings"
+};
+
+const DEFAULT_SOURCES = {
+  chatgpt: true,
+  claude: true,
+  gemini: true
+};
+
+const statusEl = document.getElementById("status");
 const countEl = document.getElementById("count");
-const refreshBtn = document.getElementById("refreshBtn");
-const exportBtn = document.getElementById("exportBtn");
-const clearBtn = document.getElementById("clearBtn");
+const sourceEl = document.getElementById("sources");
 
-function formatTimestamp(iso) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return "Unknown time";
-  }
-  return date.toLocaleString();
+function openPage(path) {
+  chrome.tabs.create({ url: chrome.runtime.getURL(path) });
 }
 
-async function getPrompts() {
-  const result = await api.storage.local.get(STORAGE_KEY);
-  return Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
+async function readDashboardSnapshot() {
+  const result = await chrome.storage.local.get([
+    STORAGE_KEYS.conversations,
+    STORAGE_KEYS.sourceSettings
+  ]);
+
+  const conversations = Array.isArray(result[STORAGE_KEYS.conversations])
+    ? result[STORAGE_KEYS.conversations]
+    : [];
+  const sourceSettings = {
+    ...DEFAULT_SOURCES,
+    ...(result[STORAGE_KEYS.sourceSettings] || {})
+  };
+
+  return { conversations, sourceSettings };
 }
 
-function render(prompts) {
-  countEl.textContent = `Captured prompts: ${prompts.length}`;
-  listEl.innerHTML = "";
-
-  if (!prompts.length) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.textContent = "No prompts captured yet. Open ChatGPT and send a prompt.";
-    listEl.appendChild(empty);
-    return;
-  }
-
-  prompts
-    .slice()
-    .reverse()
-    .forEach((item) => {
-      const card = document.createElement("article");
-      card.className = "item";
-
-      const time = document.createElement("div");
-      time.className = "time";
-      time.textContent = `${formatTimestamp(item.timestamp)} | ${item.trigger || "unknown"}`;
-
-      const text = document.createElement("div");
-      text.className = "text";
-      text.textContent = item.text || "";
-
-      card.appendChild(time);
-      card.appendChild(text);
-      listEl.appendChild(card);
-    });
+function renderSourceSettings(sourceSettings) {
+  sourceEl.innerHTML = "";
+  Object.entries(sourceSettings).forEach(([source, enabled]) => {
+    const badge = document.createElement("span");
+    badge.className = `badge ${enabled ? "on" : "off"}`;
+    badge.textContent = `${source}: ${enabled ? "on" : "off"}`;
+    sourceEl.appendChild(badge);
+  });
 }
 
-async function refresh() {
+async function renderSnapshot() {
   try {
-    const prompts = await getPrompts();
-    render(prompts);
+    const { conversations, sourceSettings } = await readDashboardSnapshot();
+    countEl.textContent = `${conversations.length} conversation records stored locally`;
+    statusEl.textContent = conversations.length
+      ? "Open a page to inspect your usage patterns."
+      : "Start in Setup to import a conversation export or enable live capture.";
+    renderSourceSettings(sourceSettings);
   } catch (error) {
-    countEl.textContent = "Failed to read data";
-    listEl.innerHTML = "";
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.textContent = `Error: ${error.message || error}`;
-    listEl.appendChild(empty);
+    countEl.textContent = "Failed to read local data";
+    statusEl.textContent = error.message || String(error);
   }
 }
 
-async function exportData() {
-  const prompts = await getPrompts();
-  const blob = new Blob([JSON.stringify(prompts, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
+pages.forEach((page) => {
+  document.getElementById(page.id).addEventListener("click", () => openPage(page.path));
+});
 
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `chatgpt-prompts-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-  a.click();
-
-  URL.revokeObjectURL(url);
-}
-
-async function clearData() {
-  const ok = confirm("Delete all captured prompts?");
-  if (!ok) {
-    return;
-  }
-  await api.storage.local.set({ [STORAGE_KEY]: [] });
-  await refresh();
-}
-
-refreshBtn.addEventListener("click", refresh);
-exportBtn.addEventListener("click", exportData);
-clearBtn.addEventListener("click", clearData);
-
-refresh();
+renderSnapshot();

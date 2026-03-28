@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LLM Coding Explorer | Categories</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="app-shell">
+  <main class="app-layout stack">
+    <header class="topbar">
+      <div class="brand">
+        <p class="eyebrow">Categories</p>
+        <h1>Topics and Language</h1>
+        <p>See the coding topics you consult most often and the words that recur across prompts and responses.</p>
+      </div>
+      <nav class="nav">
+        <a class="nav-link" data-page="setup" href="setup.html">Setup</a>
+        <a class="nav-link" data-page="time" href="time.html">Time Patterns</a>
+        <a class="nav-link" data-page="categories" href="categories.html">Categories</a>
+        <a class="nav-link" data-page="summary" href="summary.html">Summary</a>
+      </nav>
+    </header>
+
+    <section class="panel">
+      <p class="eyebrow">Topic Frequency</p>
+      <h2>Which programming topics appear most</h2>
+      <div id="topicChart"></div>
+    </section>
+
+    <section class="grid two">
+      <article class="panel">
+        <p class="eyebrow">Prompt Terms</p>
+        <h2>Word cloud from your prompts</h2>
+        <div id="promptCloud"></div>
+      </article>
+      <article class="panel">
+        <p class="eyebrow">Response Terms</p>
+        <h2>Word cloud from model responses</h2>
+        <div id="responseCloud"></div>
+      </article>
+    </section>
+
+    <section class="grid two">
+      <article class="panel">
+        <p class="eyebrow">Top Prompt Words</p>
+        <h2>Frequent prompt vocabulary</h2>
+        <div id="promptTable"></div>
+      </article>
+      <article class="panel">
+        <p class="eyebrow">Top Response Words</p>
+        <h2>Frequent response vocabulary</h2>
+        <div id="responseTable"></div>
+      </article>
+    </section>
+  </main>
+
+  <script type="module" src="src/categories-page.js"></script>
+</body>
+</html>

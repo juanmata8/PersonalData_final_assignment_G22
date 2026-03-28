@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LLM Coding Explorer | Summary</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="app-shell">
+  <main class="app-layout stack">
+    <header class="topbar">
+      <div class="brand">
+        <p class="eyebrow">Summary</p>
+        <h1>Reflection and Offloading Score</h1>
+        <p>A compact view of coding usage, the current offloading balance, and one practical next step.</p>
+      </div>
+      <nav class="nav">
+        <a class="nav-link" data-page="setup" href="setup.html">Setup</a>
+        <a class="nav-link" data-page="time" href="time.html">Time Patterns</a>
+        <a class="nav-link" data-page="categories" href="categories.html">Categories</a>
+        <a class="nav-link" data-page="summary" href="summary.html">Summary</a>
+      </nav>
+    </header>
+
+    <section class="summary-grid">
+      <article class="panel">
+        <p class="eyebrow">Cognitive Offloading Score</p>
+        <div id="scoreRing" class="score-ring" style="--score: 0">
+          <strong id="scoreValue">0</strong>
+        </div>
+        <div id="scoreBreakdown"></div>
+      </article>
+
+      <article class="panel summary-copy">
+        <p class="eyebrow">Reflection</p>
+        <h2>What the current data suggests</h2>
+        <p id="reflectionText" class="lead"></p>
+        <h2>Recommended next step</h2>
+        <p id="recommendationText"></p>
+      </article>
+    </section>
+
+    <section class="grid three" id="summaryMetrics"></section>
+  </main>
+
+  <script type="module" src="src/summary-page.js"></script>
+</body>
+</html>
