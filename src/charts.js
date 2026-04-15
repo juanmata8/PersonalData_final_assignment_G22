@@ -169,6 +169,67 @@ export function renderWordCloud(container, items, variant = "warm") {
     .text((item) => `${item.word} (${item.count})`);
 }
 
+export function renderClassicWordCloud(container, items, variant = "warm") {
+  ensureD3();
+  const root = clearContainer(container);
+
+  if (!items.length) {
+    container.appendChild(emptyState("No coding-related words are available yet."));
+    return;
+  }
+
+  const width = 760;
+  const height = 340;
+  const maxWords = 36;
+  const filteredItems = items.slice(0, maxWords);
+  const maxValue = d3.max(filteredItems, (item) => item.count) || 1;
+  const minValue = d3.min(filteredItems, (item) => item.count) || 1;
+  const fontScale = d3.scaleLinear().domain([minValue, maxValue]).range([14, 56]);
+  const warmPalette = ["#a8481f", "#c8672e", "#8b3f24", "#d78f2f", "#6c2d12", "#a06b28"];
+  const coolPalette = ["#335c4b", "#4f7e6a", "#2f6f70", "#5d7ca3", "#3f4d83", "#2b7a78"];
+  const palette = variant === "cool" ? coolPalette : warmPalette;
+  const radiusStep = Math.min(width, height) / (maxWords * 0.45);
+
+  const svg = createResponsiveSvg(root, width, height).attr("class", "chart-svg classic-cloud-svg");
+  const cloud = svg.append("g").attr("transform", `translate(${width / 2},${height / 2})`);
+
+  const positionedWords = filteredItems
+    .sort((left, right) => right.count - left.count)
+    .map((item, index) => {
+      const angle = index * 2.2;
+      const radius = (index + 1) * radiusStep;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius * 0.62;
+      const rotate = index % 7 === 0 ? -28 : index % 5 === 0 ? 24 : 0;
+      return {
+        ...item,
+        x,
+        y,
+        rotate,
+        size: fontScale(item.count),
+        color: palette[index % palette.length]
+      };
+    });
+
+  cloud
+    .selectAll(".classic-word")
+    .data(positionedWords)
+    .enter()
+    .append("text")
+    .attr("class", "classic-word")
+    .attr("x", (item) => item.x)
+    .attr("y", (item) => item.y)
+    .attr("text-anchor", "middle")
+    .attr("dominant-baseline", "middle")
+    .attr("transform", (item) => `translate(${item.x},${item.y}) rotate(${item.rotate})`)
+    .attr("fill", (item) => item.color)
+    .style("font-size", (item) => `${item.size}px`)
+    .style("font-weight", (item) => (item.size > 34 ? 700 : 600))
+    .text((item) => item.word)
+    .append("title")
+    .text((item) => `${item.word}: ${item.count}`);
+}
+
 export function renderWordTable(container, items, title) {
   ensureD3();
   const root = clearContainer(container);

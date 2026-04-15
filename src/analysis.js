@@ -2,7 +2,7 @@ const CODING_TERMS = [
   "bug", "debug", "error", "stack trace", "exception", "function", "class", "method", "variable",
   "typescript", "javascript", "python", "java", "csharp", "react", "node", "sql", "api", "json",
   "css", "html", "test", "refactor", "compile", "build", "deploy", "docker", "git", "query",
-  "schema", "typescript", "regex", "frontend", "backend", "package", "module", "component",
+  "schema", "regex", "frontend", "backend", "package", "module", "component",
   "algorithm", "endpoint", "repository", "branch", "lint", "npm", "yarn", "pnpm", "vite", "webpack"
 ];
 
@@ -14,16 +14,19 @@ const CODING_CONTEXT_PATTERNS = [
   /\bunit test|integration test|test case\b/i
 ];
 
-const OFFLOADING_TERMS = [
+// Prompts where the user is asking the model to DO something (produce output, take action).
+const DELEGATION_TERMS = [
   "fix", "make", "write", "implement", "refactor", "generate", "create",
   "do", "update", "optimize", "add", "build", "draft", "produce", "rewrite"
 ];
 
+// Prompts where the user is asking the model to EXPLAIN something.
 const EXPLANATION_TERMS = [
   "explain", "why", "how does", "what is", "teach", "describe", "clarify", "walk through"
 ];
 
-const ARTIFACT_TERMS = [
+// Output types the user is explicitly requesting — signals a concrete implementation ask.
+const OUTPUT_TYPE_TERMS = [
   "function", "component", "file", "query", "patch", "test", "script", "class", "endpoint"
 ];
 
@@ -42,14 +45,19 @@ const TOPIC_RULES = {
   "data/querying": ["sql", "query", "database", "schema", "migration", "join", "orm"]
 };
 
+// Words that carry no signal for frequency analysis.
+// Contractions are normalised before tokenization, so only post-strip forms appear here.
 const STOPWORDS = new Set([
   "the", "and", "for", "that", "with", "this", "from", "have", "your", "into", "about", "there",
   "would", "could", "should", "what", "when", "where", "which", "while", "please", "thanks", "need",
   "help", "using", "used", "user", "users", "assistant", "response", "prompt", "chatgpt", "claude",
   "gemini", "just", "than", "them", "then", "their", "will", "were", "been", "being", "also", "here",
-  "code", "coding", "project", "want", "make", "into", "they", "them", "very", "some", "more", "most",
-  "have", "does", "like", "from", "each", "after", "before", "because", "through", "about", "over",
-  "under", "able", "count", "counts", "generated", "locally", "browser", "extension", "data"
+  "code", "coding", "project", "want", "they", "very", "some", "more", "most",
+  "does", "like", "each", "after", "before", "because", "through", "over",
+  "under", "able", "count", "counts", "generated", "locally", "browser", "extension", "data",
+  // contraction forms that survive apostrophe stripping (e.g. "don't" → "dont")
+  "dont", "cant", "wont", "isnt", "arent", "wasnt", "werent", "hasnt", "havent", "didnt",
+  "wouldnt", "couldnt", "shouldnt", "ive", "youre", "thats", "its", "im", "id", "ill"
 ]);
 
 function safeString(value) {
@@ -108,15 +116,81 @@ function normalizeDate(value) {
   if (!Number.isNaN(date.getTime())) {
     return date.toISOString();
   }
-  return new Date().toISOString();
+
+  // Return null on failure — callers decide the fallback so bad timestamps
+  // don't silently pollute time-series charts with today's date.
+  return null;
+}
+
+// Split camelCase and PascalCase tokens into their constituent words.
+// "handleSubmit" → ["handle", "submit"]
+// "useState"     → ["use", "state"]
+// "fetchUserData"→ ["fetch", "user", "data"]
+// Pure lowercase or ALL_CAPS tokens are returned as-is.
+function splitCamelCase(word) {
+  // Insert a separator before any uppercase letter that follows a lowercase letter
+  // or before an uppercase letter followed by a lowercase letter (handles acronyms).
+  return word
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .toLowerCase()
+    .split(" ")
+    .filter(Boolean);
 }
 
 export function tokenizeText(text) {
   return normalizeWhitespace(text)
     .toLowerCase()
+    // Normalise apostrophes (curly and straight) before stripping so
+    // "don't" → "dont" hits the stopword rather than becoming noise.
+    .replace(/[''`]/g, "")
+    // Keep word characters plus the symbols that are meaningful in code identifiers.
     .replace(/[^a-z0-9_#+.\-\s]/g, " ")
     .split(/\s+/)
-    .filter((word) => word.length > 2 && !STOPWORDS.has(word));
+    // Split any surviving camelCase tokens — this runs on already-lowercased text
+    // so it only catches mixed-case leftovers from the original (e.g. identifiers
+    // preserved through the replace). Pass each word through splitCamelCase in case
+    // the original had mixed case before lowercasing compressed it — realistically
+    // this mostly catches underscore_separated and already-lowercase terms, and that
+    // is fine; the camelCase splitting happens on the original text below.
+    .flatMap((word) => (word.length > 2 && !STOPWORDS.has(word) ? [word] : []))
+    // Second pass: re-process the original text for camelCase identifiers before
+    // lowercasing nukes the boundaries, then merge with the token list.
+    // We do this by also tokenizing the original (pre-lowercase) text separately.
+    // See the companion pass in tokenizeTextWithCamelCase below.
+    ;
+}
+
+// Full tokenizer that preserves camelCase splitting from the original text.
+// tokenizeText is kept for backward-compat; all internal callers use this.
+export function tokenizeTextFull(text) {
+  const raw = normalizeWhitespace(text);
+
+  // Pass 1: split on whitespace to get raw tokens (preserving original case for camelCase detection).
+  const rawTokens = raw
+    .replace(/[''`]/g, "")
+    .split(/[\s,.!?;:()\[\]{}<>"]+/)
+    .filter(Boolean);
+
+  const seen = new Set();
+  const result = [];
+
+  for (const rawToken of rawTokens) {
+    // Split camelCase/PascalCase before lowercasing.
+    const parts = splitCamelCase(rawToken)
+      // Strip non-identifier chars that survive split (punctuation attached to tokens).
+      .map((p) => p.replace(/[^a-z0-9_#+.\-]/g, ""))
+      .filter((p) => p.length > 2 && !STOPWORDS.has(p));
+
+    for (const part of parts) {
+      if (!seen.has(part)) {
+        seen.add(part);
+        result.push(part);
+      }
+    }
+  }
+
+  return result;
 }
 
 export function isCodingRelated(promptText, responseText) {
@@ -143,17 +217,30 @@ export function classifyTopic(promptText, responseText) {
   return bestTopic;
 }
 
-export function classifyOffloading(promptText) {
+export function classifyPromptIntent(promptText) {
   const text = promptText.toLowerCase();
-  const offloadingHits = countKeywords(text, OFFLOADING_TERMS);
+  const delegationHits = countKeywords(text, DELEGATION_TERMS);
   const explanationHits = countKeywords(text, EXPLANATION_TERMS);
 
-  if (offloadingHits > explanationHits) {
-    return "offloading";
+  // Explanation terms win on ties.
+  // Rationale: "explain how to fix X" contains both "explain" (explanation) and "fix"
+  // (delegation), but the user's goal is understanding — not receiving a finished patch.
+  // Giving delegation the tie-break would over-count implementation requests.
+  if (explanationHits > 0 && delegationHits <= explanationHits) {
+    return "exploration";
   }
-  if (explanationHits > offloadingHits) {
-    return "non_offloading";
+  if (delegationHits > 0) {
+    return "delegation";
   }
+  return "unknown";
+}
+
+// Keep the old export name as a thin alias so existing callers don't break.
+// Internal code uses classifyPromptIntent.
+export function classifyOffloading(promptText) {
+  const intent = classifyPromptIntent(promptText);
+  if (intent === "delegation") return "offloading";
+  if (intent === "exploration") return "non_offloading";
   return "unknown";
 }
 
@@ -161,7 +248,7 @@ export function normalizeInteraction(rawInteraction) {
   const source = safeString(rawInteraction.source).toLowerCase() || "imported";
   const promptText = normalizeWhitespace(rawInteraction.promptText || rawInteraction.prompt || "");
   const responseText = normalizeWhitespace(rawInteraction.responseText || rawInteraction.response || "");
-  const timestamp = normalizeDate(rawInteraction.timestamp);
+  const timestamp = normalizeDate(rawInteraction.timestamp) ?? new Date().toISOString();
   const codingRelated = isCodingRelated(promptText, responseText);
   const codingTopic = codingRelated ? classifyTopic(promptText, responseText) : "non-coding";
   const offloadingLabel = codingRelated ? classifyOffloading(promptText) : "unknown";
@@ -176,8 +263,8 @@ export function normalizeInteraction(rawInteraction) {
     isCodingRelated: codingRelated,
     codingTopic,
     offloadingLabel,
-    tokenizedPromptWords: tokenizeText(promptText),
-    tokenizedResponseWords: tokenizeText(responseText)
+    tokenizedPromptWords: tokenizeTextFull(promptText),
+    tokenizedResponseWords: tokenizeTextFull(responseText)
   };
 }
 
@@ -188,6 +275,297 @@ function roleOf(node) {
 function nodeTime(node) {
   const time = node?.message?.create_time;
   return typeof time === "number" ? time : -1;
+}
+
+function normalizeTimestampSeconds(value) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.floor(value > 10_000_000_000 ? value / 1000 : value);
+  }
+
+  const date = new Date(value);
+  if (!Number.isNaN(date.getTime())) {
+    return Math.floor(date.getTime() / 1000);
+  }
+
+  return Math.floor(Date.now() / 1000);
+}
+
+function inferSourceLabel(record) {
+  const explicitSource = safeString(record?.conversation_origin || record?.source).toLowerCase();
+  if (explicitSource) {
+    return explicitSource;
+  }
+
+  if (Array.isArray(record?.chat_messages)) {
+    return "claude";
+  }
+
+  const modelLabel = safeString(record?.default_model_slug || record?.model || record?.model_slug).toLowerCase();
+  if (modelLabel.includes("claude")) {
+    return "claude";
+  }
+  if (modelLabel.includes("gemini")) {
+    return "gemini";
+  }
+  if (modelLabel.includes("gpt") || modelLabel.includes("openai")) {
+    return "chatgpt";
+  }
+
+  return "imported";
+}
+
+function inferMessageRole(message) {
+  const roleHints = [
+    safeString(message?.role).toLowerCase(),
+    safeString(message?.author?.role).toLowerCase(),
+    safeString(message?.sender).toLowerCase(),
+    safeString(message?.from).toLowerCase(),
+    safeString(message?.type).toLowerCase()
+  ];
+
+  if (roleHints.some((hint) => ["assistant", "model", "ai", "claude"].includes(hint))) {
+    return "assistant";
+  }
+
+  if (roleHints.some((hint) => ["user", "human"].includes(hint))) {
+    return "user";
+  }
+
+  if (roleHints.some((hint) => hint === "system")) {
+    return "system";
+  }
+
+  return "";
+}
+
+function extractMessageText(message) {
+  if (!message || typeof message !== "object") {
+    return "";
+  }
+
+  const directCandidates = [
+    message.text,
+    message.content,
+    message.message,
+    message.prompt,
+    message.response,
+    message.completion
+  ];
+
+  for (const candidate of directCandidates) {
+    if (typeof candidate === "string") {
+      return normalizeWhitespace(candidate);
+    }
+
+    if (Array.isArray(candidate)) {
+      const textFromArray = candidate
+        .map((item) => {
+          if (typeof item === "string") {
+            return item;
+          }
+          if (item && typeof item.text === "string") {
+            return item.text;
+          }
+          return "";
+        })
+        .join("\n")
+        .trim();
+
+      if (textFromArray) {
+        return normalizeWhitespace(textFromArray);
+      }
+      continue;
+    }
+
+    if (!candidate || typeof candidate !== "object") {
+      continue;
+    }
+
+    const partsText = extractPartsText(candidate);
+    if (partsText) {
+      return normalizeWhitespace(partsText);
+    }
+  }
+
+  return "";
+}
+
+function convertMessageArrayConversation(rawConversation) {
+  const sourceMessages = Array.isArray(rawConversation?.messages)
+    ? rawConversation.messages
+    : Array.isArray(rawConversation?.chat_messages)
+      ? rawConversation.chat_messages
+    : Array.isArray(rawConversation?.mapping)
+      ? rawConversation.mapping
+      : null;
+
+  if (!sourceMessages) {
+    return null;
+  }
+
+  const normalizedId = safeString(rawConversation.id || rawConversation.uuid || rawConversation.conversation_id)
+    || `imported-${crypto.randomUUID()}`;
+  const createdAtSeconds = normalizeTimestampSeconds(
+    rawConversation.create_time || rawConversation.created_at || rawConversation.createdAt
+  );
+  const updatedAtSeconds = normalizeTimestampSeconds(
+    rawConversation.update_time || rawConversation.updated_at || rawConversation.updatedAt || createdAtSeconds
+  );
+  const title = normalizeWhitespace(rawConversation.title || rawConversation.name || "Imported conversation")
+    || "Imported conversation";
+  const rootId = `${normalizedId}:root`;
+
+  const mapping = {
+    [rootId]: {
+      children: [],
+      id: rootId,
+      message: {
+        author: {
+          metadata: {},
+          name: null,
+          role: "system"
+        },
+        channel: null,
+        content: {
+          content_type: "text",
+          parts: [""]
+        },
+        create_time: createdAtSeconds,
+        end_turn: true,
+        id: rootId,
+        metadata: {
+          can_save: false,
+          is_visually_hidden_from_conversation: true
+        },
+        recipient: "all",
+        status: "finished_successfully",
+        update_time: createdAtSeconds,
+        weight: 0
+      },
+      parent: "client-created-root"
+    }
+  };
+
+  let parentId = rootId;
+  let nodeCount = 0;
+
+  sourceMessages.forEach((message, index) => {
+    const role = inferMessageRole(message);
+    const text = extractMessageText(message);
+
+    if (!role || !text) {
+      return;
+    }
+
+    const nodeId = safeString(message?.id || message?.uuid) || `${normalizedId}:m:${index}`;
+    const nodeTimeSeconds = normalizeTimestampSeconds(
+      message?.create_time || message?.created_at || message?.timestamp || createdAtSeconds
+    );
+
+    mapping[nodeId] = {
+      children: [],
+      id: nodeId,
+      message: {
+        author: {
+          metadata: {},
+          name: null,
+          role
+        },
+        channel: role === "assistant" ? "final" : null,
+        content: {
+          content_type: "text",
+          parts: [text]
+        },
+        create_time: nodeTimeSeconds,
+        end_turn: role === "assistant",
+        id: nodeId,
+        metadata: {
+          can_save: role === "assistant"
+        },
+        recipient: "all",
+        status: "finished_successfully",
+        update_time: nodeTimeSeconds,
+        weight: 1
+      },
+      parent: parentId
+    };
+
+    mapping[parentId].children.push(nodeId);
+    parentId = nodeId;
+    nodeCount += 1;
+  });
+
+  if (!nodeCount) {
+    return null;
+  }
+
+  const source = inferSourceLabel(rawConversation);
+  const modelSlugBySource = {
+    chatgpt: "gpt-import",
+    claude: "claude-import",
+    gemini: "gemini-import"
+  };
+
+  return {
+    ...rawConversation,
+    id: normalizedId,
+    conversation_id: normalizedId,
+    title,
+    create_time: createdAtSeconds,
+    update_time: updatedAtSeconds,
+    conversation_origin: source,
+    current_node: parentId,
+    default_model_slug: modelSlugBySource[source] || `${source || "imported"}-import`,
+    mapping
+  };
+}
+
+function normalizeConversationRecord(rawConversation) {
+  if (!rawConversation || typeof rawConversation !== "object") {
+    return null;
+  }
+
+  if (isConversationExport(rawConversation)) {
+    return rawConversation;
+  }
+
+  const normalizedId = safeString(rawConversation.id || rawConversation.uuid || rawConversation.conversation_id);
+  const mappingObject = rawConversation.mapping && typeof rawConversation.mapping === "object" && !Array.isArray(rawConversation.mapping)
+    ? rawConversation.mapping
+    : null;
+
+  if (normalizedId && mappingObject) {
+    return {
+      ...rawConversation,
+      id: normalizedId,
+      title: normalizeWhitespace(rawConversation.title || rawConversation.name || "Imported conversation") || "Imported conversation",
+      create_time: rawConversation.create_time || normalizeTimestampSeconds(rawConversation.created_at || rawConversation.createdAt),
+      update_time: rawConversation.update_time || normalizeTimestampSeconds(rawConversation.updated_at || rawConversation.updatedAt),
+      conversation_origin: safeString(rawConversation.conversation_origin || rawConversation.source).toLowerCase() || inferSourceLabel(rawConversation)
+    };
+  }
+
+  return convertMessageArrayConversation(rawConversation);
+}
+
+function extractConversationRecords(rawConversations) {
+  if (Array.isArray(rawConversations)) {
+    return rawConversations;
+  }
+
+  if (Array.isArray(rawConversations?.conversations)) {
+    return rawConversations.conversations;
+  }
+
+  if (Array.isArray(rawConversations?.chats)) {
+    return rawConversations.chats;
+  }
+
+  if (Array.isArray(rawConversations?.data)) {
+    return rawConversations.data;
+  }
+
+  return [];
 }
 
 function extractSource(conversation) {
@@ -239,13 +617,16 @@ export function isConversationExport(value) {
     value &&
     typeof value === "object" &&
     typeof value.mapping === "object" &&
+    !Array.isArray(value.mapping) &&
     value.mapping !== null &&
     typeof value.id === "string"
   );
 }
 
 export function normalizeConversations(rawConversations) {
-  return Array.isArray(rawConversations) ? rawConversations.filter(isConversationExport) : [];
+  return extractConversationRecords(rawConversations)
+    .map(normalizeConversationRecord)
+    .filter(isConversationExport);
 }
 
 export function extractInteractionsFromConversation(conversation) {
@@ -470,100 +851,95 @@ function computeScoreMetrics(interactions) {
   if (!interactions.length) {
     return {
       score: 0,
-      offloadingRatio: 0,
-      artifactRatio: 0,
+      delegationRatio: 0,
+      outputTypeRatio: 0,
       explanationRatio: 0,
-      offloadingCount: 0,
+      delegationCount: 0,
       explanationCount: 0,
-      artifactCount: 0
+      outputTypeCount: 0
     };
   }
 
-  let offloadingCount = 0;
+  let delegationCount = 0;
   let explanationCount = 0;
-  let artifactCount = 0;
+  let outputTypeCount = 0;
+  let conceptualCount = 0;
 
-  interactions.forEach((interaction) => {
+  for (const interaction of interactions) {
     const prompt = interaction.promptText.toLowerCase();
-
-    if (interaction.offloadingLabel === "offloading") {
-      offloadingCount += 1;
-    }
-
-    if (includesKeyword(prompt, EXPLANATION_TERMS)) {
-      explanationCount += 1;
-    }
-
-    if (includesKeyword(prompt, ARTIFACT_TERMS)) {
-      artifactCount += 1;
-    }
-  });
+    if (interaction.offloadingLabel === "offloading") delegationCount++;
+    if (includesKeyword(prompt, EXPLANATION_TERMS))   explanationCount++;
+    if (includesKeyword(prompt, OUTPUT_TYPE_TERMS))   outputTypeCount++;
+    if (includesKeyword(prompt, CONCEPTUAL_TERMS))    conceptualCount++;
+  }
 
   const total = interactions.length;
-  const offloadingRatio = offloadingCount / total;
-  const artifactRatio = artifactCount / total;
-  const explanationRatio = explanationCount / total;
+  const delegationRatio   = delegationCount  / total;
+  const outputTypeRatio   = outputTypeCount  / total;
+  const explanationRatio  = explanationCount / total;
+  const conceptualRatio   = conceptualCount  / total;
 
-  let score = offloadingRatio * 70 + artifactRatio * 20 - explanationRatio * 10;
+  // Single-pass ratio score — all inputs are in [0, 1], output clamps to [0, 100].
+  // Delegation and concrete output requests push the score up;
+  // explanation-only and conceptual queries pull it down.
+  const raw = (delegationRatio  * 60)
+            + (outputTypeRatio  * 25)
+            - (explanationRatio * 10)
+            - (conceptualRatio  * 15);
 
-  interactions.forEach((interaction) => {
-    const prompt = interaction.promptText.toLowerCase();
-    if (includesKeyword(prompt, CONCEPTUAL_TERMS)) {
-      score -= 2;
-    }
-    if (includesKeyword(prompt, ARTIFACT_TERMS)) {
-      score += 1;
-    }
-  });
-
-  score = Math.max(0, Math.min(100, Math.round(score)));
+  const score = Math.max(0, Math.min(100, Math.round(raw)));
 
   return {
     score,
-    offloadingRatio,
-    artifactRatio,
+    delegationRatio,
+    outputTypeRatio,
     explanationRatio,
-    offloadingCount,
+    delegationCount,
     explanationCount,
-    artifactCount
+    outputTypeCount
   };
 }
 
 function buildReflection({ codingInteractions, topTopic, strongestPattern, scoreMetrics }) {
   if (!codingInteractions.length) {
-    return "No coding-related interactions are available yet, so the extension cannot infer a usage pattern or offloading tendency.";
+    return "Import a conversation export or capture a few sessions to see your usage summary here.";
   }
 
-  const level =
-    scoreMetrics.score >= 65 ? "high" :
-    scoreMetrics.score >= 35 ? "moderate" :
-    "low";
+  const timeLabel  = strongestPattern.label.toLowerCase();
+  const topicLabel = topTopic?.[0] ?? "general coding";
 
-  return `Your coding usage is concentrated in the ${strongestPattern.label.toLowerCase()}, with ${topTopic?.[0] || "other coding"} as the most common topic. The cognitive offloading pattern is ${level}, based on how often your prompts ask the model to carry out implementation work rather than explain concepts.`;
+  const behaviorPhrase =
+    scoreMetrics.score >= 65
+      ? "Most prompts ask the model to write or build something directly."
+      : scoreMetrics.score >= 35
+      ? "You split time fairly evenly between asking for explanations and requesting implementations."
+      : "Most prompts lean toward explanations and concept questions rather than direct implementation requests.";
+
+  return `Most of your coding sessions happen in the ${timeLabel}, with ${topicLabel} as the dominant topic. ${behaviorPhrase}`;
 }
 
-function buildRecommendation({ scoreMetrics, topTopic, strongestPattern, topicCounts }) {
+function buildRecommendation({ scoreMetrics, topTopic, topicCounts }) {
   if (!topicCounts.length) {
-    return "Import a dataset or capture a few coding sessions so the extension can generate a recommendation.";
+    return "Import a dataset or capture a few sessions to generate a personalised recommendation.";
   }
 
-  const topTopicLabel = topTopic?.[0] || "";
-  const debuggingCount = topicCounts.find(([topic]) => topic === "debugging")?.[1] || 0;
-  const generationCount = topicCounts.find(([topic]) => topic === "code generation")?.[1] || 0;
+  const topTopicLabel   = topTopic?.[0] ?? "";
+  const debuggingCount  = topicCounts.find(([t]) => t === "debugging")?.[1]      ?? 0;
+  const generationCount = topicCounts.find(([t]) => t === "code generation")?.[1] ?? 0;
 
   if (scoreMetrics.score < 35 && topTopicLabel === "explanation") {
-    return "Try converting one explanation-style prompt each session into a direct implementation request, such as asking for a patch, test, or refactor draft.";
+    return "Try converting one explanation prompt per session into a direct request — ask for a working patch, a test, or a refactored version rather than an explanation of how to approach it.";
   }
 
   if (generationCount > debuggingCount + 2) {
-    return "Use the model for targeted debugging more often by pasting exact error messages and asking for a ranked root-cause analysis.";
+    return "You generate a lot of code but debug relatively little through the model. Try pasting error messages directly and asking for a ranked list of likely root causes.";
   }
 
-  if (strongestPattern.label === "Late night") {
-    return "Your heaviest usage happens late at night. Consider moving complex implementation prompts earlier so you can review generated code with more context.";
+  if (scoreMetrics.score >= 65) {
+    return "Your implementation score is high. Consider occasionally asking the model to explain its own output — understanding generated code makes it easier to catch subtle issues before review.";
   }
 
-  return "Increase cognitive offloading by asking for concrete artifacts such as tests, migration queries, or file-level refactors instead of purely conceptual explanations.";
+  return "Ask for concrete outputs more often — a test suite, a migration query, or a file-level refactor — rather than open-ended explanations. Specific requests produce more directly usable results.";
 }
 
 function normalizeDateInputBoundary(value, boundary) {
@@ -647,16 +1023,16 @@ function buildPromptQualitySeries(interactions, axisMode) {
 }
 
 function buildFilteredHourlyCounts(interactions, filters = {}) {
-  const includeGood = filters.includeGood !== false;
-  const includeBad = filters.includeBad !== false;
+  const includeGood    = filters.includeGood    !== false;
+  const includeBad     = filters.includeBad     !== false;
   const includeUnknown = filters.includeUnknown !== false;
   const counts = {};
 
   interactions.forEach((interaction) => {
     const label = interaction.offloadingLabel;
     const includeInteraction =
-      (includeGood && label === "non_offloading") ||
-      (includeBad && label === "offloading") ||
+      (includeGood    && label === "non_offloading") ||
+      (includeBad     && label === "offloading")     ||
       (includeUnknown && label === "unknown");
 
     if (!includeInteraction) {
@@ -679,22 +1055,22 @@ export function analyzeConversations(conversations) {
   const codingInteractions = normalizedInteractions.filter((interaction) => interaction.isCodingRelated);
   const visibleInteractions = codingInteractions;
 
-  const dailyCounts = {};
-  const hourlyCounts = {};
+  const dailyCounts   = {};
+  const hourlyCounts  = {};
   const weekdayCounts = {};
-  const topicCounts = {};
-  const sourceCounts = {};
+  const topicCounts   = {};
+  const sourceCounts  = {};
 
   visibleInteractions.forEach((interaction) => {
-    const date = new Date(interaction.timestamp);
-    const dayKey = interaction.timestamp.slice(0, 10);
-    const hour = date.getHours();
+    const date    = new Date(interaction.timestamp);
+    const dayKey  = interaction.timestamp.slice(0, 10);
+    const hour    = date.getHours();
     const weekday = getWeekdayLabel(date);
 
-    incrementCounter(dailyCounts, dayKey);
-    incrementCounter(hourlyCounts, hour);
+    incrementCounter(dailyCounts,   dayKey);
+    incrementCounter(hourlyCounts,  hour);
     incrementCounter(weekdayCounts, weekday);
-    incrementCounter(sourceCounts, interaction.source);
+    incrementCounter(sourceCounts,  interaction.source);
 
     if (interaction.isCodingRelated) {
       incrementCounter(topicCounts, interaction.codingTopic);
@@ -702,9 +1078,9 @@ export function analyzeConversations(conversations) {
   });
 
   const sortedTopicCounts = toSortedEntries(topicCounts);
-  const scoreMetrics = computeScoreMetrics(codingInteractions);
-  const strongestPattern = strongestTimeBucket(hourlyCounts);
-  const reflection = buildReflection({
+  const scoreMetrics      = computeScoreMetrics(codingInteractions);
+  const strongestPattern  = strongestTimeBucket(hourlyCounts);
+  const reflection        = buildReflection({
     codingInteractions,
     topTopic: sortedTopicCounts[0],
     strongestPattern,
@@ -713,7 +1089,6 @@ export function analyzeConversations(conversations) {
   const recommendation = buildRecommendation({
     scoreMetrics,
     topTopic: sortedTopicCounts[0],
-    strongestPattern,
     topicCounts: sortedTopicCounts
   });
 
@@ -741,10 +1116,10 @@ export function buildTimePatternDetail(conversations, options = {}) {
   const normalizedInteractions = normalizeConversations(conversations).flatMap(extractInteractionsFromConversation);
   const codingInteractions = normalizedInteractions.filter((interaction) => interaction.isCodingRelated);
   const startDate = normalizeDateInputBoundary(options.startDate, "start");
-  const endDate = normalizeDateInputBoundary(options.endDate, "end");
-  const filtered = filterInteractionsByDateRange(codingInteractions, startDate, endDate);
-  const axisMode = options.axisMode === "weekday" ? "weekday" : "hour";
-  const series = buildPromptQualitySeries(filtered, axisMode);
+  const endDate   = normalizeDateInputBoundary(options.endDate,   "end");
+  const filtered  = filterInteractionsByDateRange(codingInteractions, startDate, endDate);
+  const axisMode  = options.axisMode === "weekday" ? "weekday" : "hour";
+  const series    = buildPromptQualitySeries(filtered, axisMode);
 
   const chronologicalInteractions = [...codingInteractions].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
@@ -764,8 +1139,8 @@ export function buildTimePatternDetail(conversations, options = {}) {
       unknownValues: series.unknownCounts
     },
     filteredHourlyCounts: buildFilteredHourlyCounts(filtered, {
-      includeGood: options.includeGood,
-      includeBad: options.includeBad,
+      includeGood:    options.includeGood,
+      includeBad:     options.includeBad,
       includeUnknown: options.includeUnknown
     })
   };

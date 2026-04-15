@@ -12,7 +12,7 @@ import { renderMetricList } from "./charts.js";
 
 markActiveNav("setup");
 
-const csvFileInput = document.getElementById("csvFile");
+const jsonFileInput = document.getElementById("csvFile");
 const importBtn = document.getElementById("importBtn");
 const previewWrap = document.getElementById("previewWrap");
 const sourceList = document.getElementById("sourceList");
@@ -114,7 +114,7 @@ async function renderSnapshot() {
   });
 }
 
-csvFileInput.addEventListener("change", async (event) => {
+jsonFileInput.addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
   if (!file) {
     return;
@@ -135,7 +135,7 @@ csvFileInput.addEventListener("change", async (event) => {
   parsedConversations = normalizeConversations(parsed);
   renderPreview(parsedConversations);
   syncImportButton();
-  setStatus("importStatus", `Parsed ${parsedConversations.length} conversation records from the JSON export.`);
+  setStatus("importStatus", `Parsed ${parsedConversations.length} conversation records from the JSON file.`);
 });
 
 importBtn.addEventListener("click", async () => {
@@ -160,7 +160,7 @@ importBtn.addEventListener("click", async () => {
     await saveImportMetadata({
       importedAt: new Date().toISOString(),
       conversationCount: parsedConversations.length,
-      format: "conversations.json"
+      format: "json"
     });
 
     setStatus("importStatus", `Imported ${parsedConversations.length} conversation records into local storage.`);
