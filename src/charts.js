@@ -290,7 +290,8 @@ export function renderClassicWordCloud(container, items, variant = "warm") {
         y: placement.y,
         rotate: 0,
         size,
-        color: colorScale(index)
+        // Match the normal cloud: prefer precomputed quality color when available.
+        color: item.color ?? colorScale(index)
       };
     })
     .filter(Boolean);

@@ -364,8 +364,7 @@ function splitCamelCase(word) {
 export function tokenizeText(text) {
   return normalizeWhitespace(text)
     .toLowerCase()
-    // Normalise apostrophes (curly and straight) before stripping so
-    // "don't" → "dont" hits the stopword rather than becoming noise.
+    // Normalise apostrophes (curly and straight) before stripping.
     .replace(/[''`]/g, "")
     // Keep word characters plus the symbols that are meaningful in code identifiers.
     .replace(/[^a-z0-9_#+.\-\s]/g, " ")
@@ -376,7 +375,7 @@ export function tokenizeText(text) {
     // the original had mixed case before lowercasing compressed it — realistically
     // this mostly catches underscore_separated and already-lowercase terms, and that
     // is fine; the camelCase splitting happens on the original text below.
-    .flatMap((word) => (word.length > 2 && !STOPWORDS.has(word) ? [word] : []))
+    .flatMap((word) => (ANALYSIS_VOCABULARY.has(word) ? [word] : []))
     // Second pass: re-process the original text for camelCase identifiers before
     // lowercasing nukes the boundaries, then merge with the token list.
     // We do this by also tokenizing the original (pre-lowercase) text separately.
@@ -403,7 +402,7 @@ export function tokenizeTextFull(text) {
     const parts = splitCamelCase(rawToken)
       // Strip non-identifier chars that survive split (punctuation attached to tokens).
       .map((p) => p.replace(/[^a-z0-9_#+.\-]/g, ""))
-      .filter((p) => p.length > 2 && !STOPWORDS.has(p));
+      .filter((p) => ANALYSIS_VOCABULARY.has(p));
 
     for (const part of parts) {
       if (!seen.has(part)) {
