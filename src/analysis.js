@@ -45,21 +45,24 @@ const TOPIC_RULES = {
   "data/querying": ["sql", "query", "database", "schema", "migration", "join", "orm"]
 };
 
-// Words that carry no signal for frequency analysis.
-// Contractions are normalised before tokenization, so only post-strip forms appear here.
-const STOPWORDS = new Set([
-  "the", "and", "for", "that", "with", "this", "from", "have", "your", "into", "about", "there",
-  "would", "could", "should", "what", "when", "where", "which", "while", "please", "thanks", "need",
-  "can", "you", "are", "not", "but", "use", "example", "question", "run", "current", "yet", "get", "all",
-  "help", "using", "used", "user", "users", "assistant", "response", "prompt", "chatgpt", "claude",
-  "gemini", "just", "than", "them", "then", "their", "will", "were", "been", "being", "also", "here",
-  "code", "coding", "project", "want", "they", "very", "some", "more", "most",
-  "does", "like", "each", "after", "before", "because", "through", "over",
-  "under", "able", "count", "counts", "generated", "locally", "browser", "extension", "data",
-  // contraction forms that survive apostrophe stripping (e.g. "don't" → "dont")
-  "dont", "cant", "wont", "isnt", "arent", "wasnt", "werent", "hasnt", "havent", "didnt",
-  "wouldnt", "couldnt", "shouldnt", "ive", "youre", "thats", "its", "im", "id", "ill"
+// Explicit vocabulary used for offloading/non-offloading word analysis.
+// Any word outside these lists is ignored in word-frequency outputs.
+const OFFLOADING_VOCABULARY = [
+  "fix", "make", "write", "implement", "refactor", "generate", "create",
+  "update", "optimize", "add", "build", "draft", "produce", "rewrite"
+];
+
+const NON_OFFLOADING_VOCABULARY = [
+  "explain", "why", "how", "what", "teach", "describe", "clarify", "walk", "through"
+];
+
+const ANALYSIS_VOCABULARY = new Set([
+  ...OFFLOADING_VOCABULARY,
+  ...NON_OFFLOADING_VOCABULARY
 ]);
+
+const OFFLOADING_VOCABULARY_SET = new Set(OFFLOADING_VOCABULARY);
+const NON_OFFLOADING_VOCABULARY_SET = new Set(NON_OFFLOADING_VOCABULARY);
 
 // ---------------------------------------------------------------------------
 // Word quality scores
