@@ -14,6 +14,9 @@ function ensureD3() {
 }
 
 function clearContainer(container) {
+  if (!container) {
+    return null;
+  }
   container.innerHTML = "";
   return d3.select(container);
 }
@@ -43,6 +46,9 @@ function applyAxisStyle(selection) {
 }
 
 export function renderBarChart(container, items, options = {}) {
+  if (!container) {
+    return;
+  }
   ensureD3();
   const root = clearContainer(container);
 
@@ -128,6 +134,9 @@ export function renderBarChart(container, items, options = {}) {
 }
 
 export function renderHeatGrid(container, items, options = {}) {
+  if (!container) {
+    return;
+  }
   ensureD3();
   const root = clearContainer(container);
 
@@ -148,6 +157,9 @@ export function renderHeatGrid(container, items, options = {}) {
 }
 
 export function renderWordCloud(container, items, variant = "warm") {
+  if (!container) {
+    return;
+  }
   ensureD3();
   const root = clearContainer(container);
 
@@ -170,6 +182,9 @@ export function renderWordCloud(container, items, variant = "warm") {
 }
 
 export function renderClassicWordCloud(container, items, variant = "warm") {
+  if (!container) {
+    return;
+  }
   ensureD3();
   const root = clearContainer(container);
 
@@ -178,38 +193,103 @@ export function renderClassicWordCloud(container, items, variant = "warm") {
     return;
   }
 
-  const width = 760;
-  const height = 340;
-  const maxWords = 36;
-  const filteredItems = items.slice(0, maxWords);
+  const width = 1120;
+  const height = 560;
+  const filteredItems = [...items];
   const maxValue = d3.max(filteredItems, (item) => item.count) || 1;
   const minValue = d3.min(filteredItems, (item) => item.count) || 1;
-  const fontScale = d3.scaleLinear().domain([minValue, maxValue]).range([14, 56]);
-  const warmPalette = ["#a8481f", "#c8672e", "#8b3f24", "#d78f2f", "#6c2d12", "#a06b28"];
-  const coolPalette = ["#335c4b", "#4f7e6a", "#2f6f70", "#5d7ca3", "#3f4d83", "#2b7a78"];
-  const palette = variant === "cool" ? coolPalette : warmPalette;
-  const radiusStep = Math.min(width, height) / (maxWords * 0.45);
+  const fontScale = minValue === maxValue
+    ? () => 22
+    : d3.scaleSqrt().domain([minValue, maxValue]).range([12, 64]);
+  const colorScale = d3.scaleSequential()
+    .domain([0, Math.max(1, filteredItems.length - 1)])
+    .interpolator(variant === "cool" ? d3.interpolateSinebow : d3.interpolateTurbo);
+
+  const maxRadiusX = width * 0.42;
+  const maxRadiusY = height * 0.36;
 
   const svg = createResponsiveSvg(root, width, height).attr("class", "chart-svg classic-cloud-svg");
   const cloud = svg.append("g").attr("transform", `translate(${width / 2},${height / 2})`);
 
+  const overlapPadding = 4;
+  const placedBoxes = [];
+
+  function intersects(boxA, boxB) {
+    return !(
+      boxA.right + overlapPadding < boxB.left ||
+      boxA.left > boxB.right + overlapPadding ||
+      boxA.bottom + overlapPadding < boxB.top ||
+      boxA.top > boxB.bottom + overlapPadding
+    );
+  }
+
+  function estimateBox(word, size, x, y) {
+    const estimatedWidth = Math.max(size * 2, size * (word.length * 0.56 + 0.9));
+    const estimatedHeight = size * 1.12;
+
+    return {
+      left: x - estimatedWidth / 2,
+      right: x + estimatedWidth / 2,
+      top: y - estimatedHeight / 2,
+      bottom: y + estimatedHeight / 2
+    };
+  }
+
+  function findNonOverlappingPosition(word, size, seed) {
+    const maxAttempts = 900;
+    const baseAngle = seed * 0.89;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const progress = maxAttempts <= 1 ? 0 : attempt / (maxAttempts - 1);
+      const radiusFactor = Math.sqrt(progress);
+      const angle = baseAngle + attempt * 0.43;
+      const x = Math.cos(angle) * maxRadiusX * radiusFactor;
+      const y = Math.sin(angle) * maxRadiusY * radiusFactor;
+      const box = estimateBox(word, size, x, y);
+
+      const inBounds = box.left >= -maxRadiusX && box.right <= maxRadiusX && box.top >= -maxRadiusY && box.bottom <= maxRadiusY;
+      if (!inBounds) {
+        continue;
+      }
+
+      const hasOverlap = placedBoxes.some((placed) => intersects(box, placed));
+      if (!hasOverlap) {
+        return { x, y, box };
+      }
+    }
+
+    return null;
+  }
+
   const positionedWords = filteredItems
     .sort((left, right) => right.count - left.count)
     .map((item, index) => {
-      const angle = index * 2.2;
-      const radius = (index + 1) * radiusStep;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius * 0.62;
-      const rotate = index % 7 === 0 ? -28 : index % 5 === 0 ? 24 : 0;
+      let size = fontScale(item.count);
+      let placement = null;
+
+      for (let shrinkStep = 0; shrinkStep < 5 && !placement; shrinkStep += 1) {
+        placement = findNonOverlappingPosition(item.word, size, index);
+        if (!placement) {
+          size = Math.max(10, size * 0.9);
+        }
+      }
+
+      if (!placement) {
+        return null;
+      }
+
+      placedBoxes.push(placement.box);
+
       return {
         ...item,
-        x,
-        y,
-        rotate,
-        size: fontScale(item.count),
-        color: palette[index % palette.length]
+        x: placement.x,
+        y: placement.y,
+        rotate: 0,
+        size,
+        color: colorScale(index)
       };
-    });
+    })
+    .filter(Boolean);
 
   cloud
     .selectAll(".classic-word")
@@ -217,8 +297,8 @@ export function renderClassicWordCloud(container, items, variant = "warm") {
     .enter()
     .append("text")
     .attr("class", "classic-word")
-    .attr("x", (item) => item.x)
-    .attr("y", (item) => item.y)
+    .attr("x", 0)
+    .attr("y", 0)
     .attr("text-anchor", "middle")
     .attr("dominant-baseline", "middle")
     .attr("transform", (item) => `translate(${item.x},${item.y}) rotate(${item.rotate})`)
@@ -230,7 +310,114 @@ export function renderClassicWordCloud(container, items, variant = "warm") {
     .text((item) => `${item.word}: ${item.count}`);
 }
 
+export function renderLollipopChart(container, items, options = {}) {
+  if (!container) {
+    return;
+  }
+  ensureD3();
+  const root = clearContainer(container);
+
+  if (!items.length) {
+    container.appendChild(emptyState(options.emptyMessage || "No word frequency data is available yet."));
+    return;
+  }
+
+  const data = items.map((item) => ({
+    label: item.word,
+    value: item.count
+  }));
+
+  const width = 760;
+  const rowHeight = 30;
+  const height = Math.max(280, data.length * rowHeight + 72);
+  const margin = { top: 18, right: 40, bottom: 30, left: 150 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+  const stemColor = options.variant === "cool" ? "#2f6f70" : "#a8481f";
+  const dotColor = options.variant === "cool" ? "#3f8c8e" : "#d0702f";
+
+  const svg = createResponsiveSvg(root, width, height);
+  const chart = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear()
+    .domain([0, d3.max(data, (item) => item.value) || 1])
+    .nice()
+    .range([0, innerWidth]);
+
+  const y = d3.scaleBand()
+    .domain(data.map((item) => item.label))
+    .range([0, innerHeight])
+    .padding(0.35);
+
+  chart.append("g")
+    .attr("class", "chart-grid")
+    .call(d3.axisBottom(x).ticks(5).tickSize(innerHeight).tickFormat(""))
+    .call((group) => {
+      group.attr("transform", "translate(0,0)");
+      group.select(".domain").remove();
+      group.selectAll("line").attr("stroke", "rgba(100, 91, 80, 0.1)");
+    });
+
+  chart.append("g")
+    .attr("transform", `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x).ticks(5).tickSizeOuter(0))
+    .call(applyAxisStyle);
+
+  chart.append("g")
+    .call(d3.axisLeft(y).tickSize(0))
+    .call((group) => {
+      group.select(".domain").remove();
+      group.selectAll("text")
+        .attr("fill", "#645b50")
+        .style("font-size", "14px");
+    });
+
+  chart.selectAll(".lollipop-stem")
+    .data(data)
+    .enter()
+    .append("line")
+    .attr("class", "lollipop-stem")
+    .attr("x1", 0)
+    .attr("x2", (item) => x(item.value))
+    .attr("y1", (item) => (y(item.label) || 0) + y.bandwidth() / 2)
+    .attr("y2", (item) => (y(item.label) || 0) + y.bandwidth() / 2)
+    .attr("stroke", stemColor)
+    .attr("stroke-opacity", 0.55)
+    .attr("stroke-width", 2);
+
+  chart.selectAll(".lollipop-dot")
+    .data(data)
+    .enter()
+    .append("circle")
+    .attr("class", "lollipop-dot")
+    .attr("cx", (item) => x(item.value))
+    .attr("cy", (item) => (y(item.label) || 0) + y.bandwidth() / 2)
+    .attr("r", 5)
+    .attr("fill", dotColor);
+
+  chart.selectAll(".lollipop-value")
+    .data(data)
+    .enter()
+    .append("text")
+    .attr("class", "lollipop-value")
+    .attr("x", (item) => x(item.value) + 8)
+    .attr("y", (item) => (y(item.label) || 0) + y.bandwidth() / 2)
+    .attr("dominant-baseline", "middle")
+    .attr("fill", "#201a15")
+    .style("font-size", "11px")
+    .text((item) => item.value);
+
+  svg.append("text")
+    .attr("x", margin.left)
+    .attr("y", 12)
+    .attr("class", "bar-axis-label")
+    .text(options.xLabel || "Count");
+}
+
 export function renderWordTable(container, items, title) {
+  if (!container) {
+    return;
+  }
   ensureD3();
   const root = clearContainer(container);
 
@@ -250,6 +437,9 @@ export function renderWordTable(container, items, title) {
 }
 
 export function renderMetricList(container, items) {
+  if (!container) {
+    return;
+  }
   ensureD3();
   const root = clearContainer(container);
 
@@ -265,6 +455,9 @@ export function renderMetricList(container, items) {
 }
 
 export function renderDualLineChart(container, series, options = {}) {
+  if (!container) {
+    return;
+  }
   ensureD3();
   const root = clearContainer(container);
   const total = [...series.goodValues, ...series.badValues, ...(series.unknownValues || [])].reduce((sum, value) => sum + value, 0);
@@ -350,6 +543,9 @@ export function renderDualLineChart(container, series, options = {}) {
 }
 
 export function renderGroupedBarChart(container, series, options = {}) {
+  if (!container) {
+    return;
+  }
   ensureD3();
   const root = clearContainer(container);
   const total = [...series.goodValues, ...series.badValues, ...(series.unknownValues || [])].reduce((sum, value) => sum + value, 0);

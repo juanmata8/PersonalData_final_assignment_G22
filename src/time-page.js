@@ -22,6 +22,18 @@ const heatmapUnknownToggle = document.getElementById("heatmapUnknownToggle");
 
 let conversationsCache = [];
 
+function buildCategoryLabel(baseLabel, words, maxWords = 3) {
+  const topWords = Array.isArray(words)
+    ? words.slice(0, maxWords).map((item) => item.word).filter(Boolean)
+    : [];
+
+  if (!topWords.length) {
+    return baseLabel;
+  }
+
+  return `${baseLabel} (${topWords.join(", ")})`;
+}
+
 function syncDateInputs(startInput, endInput, detail) {
   if (!detail.minDate || !detail.maxDate) {
     return;
@@ -85,16 +97,16 @@ async function renderPage() {
   });
   renderDualLineChart(qualityRatioChart, ratioDetail.qualitySeries, {
     yMax: 1,
-    goodLabel: "Good prompts",
-    badLabel: "Bad prompts",
-    unknownLabel: "Unknown prompts",
+    goodLabel: buildCategoryLabel("Good prompts", ratioDetail.categoryWordUsage?.good),
+    badLabel: buildCategoryLabel("Bad prompts", ratioDetail.categoryWordUsage?.bad),
+    unknownLabel: buildCategoryLabel("Unknown prompts", ratioDetail.categoryWordUsage?.unknown),
     yLabel: "Ratio",
     emptyMessage: "No coding prompts are available in the selected interval."
   });
   renderGroupedBarChart(qualityCountChart, countDetail.qualityCountSeries, {
-    goodLabel: "Good",
-    badLabel: "Bad",
-    unknownLabel: "Unknown",
+    goodLabel: buildCategoryLabel("Good", countDetail.categoryWordUsage?.good),
+    badLabel: buildCategoryLabel("Bad", countDetail.categoryWordUsage?.bad),
+    unknownLabel: buildCategoryLabel("Unknown", countDetail.categoryWordUsage?.unknown),
     yLabel: "Count",
     emptyMessage: "No offloading-labeled coding prompts are available in the selected interval."
   });
