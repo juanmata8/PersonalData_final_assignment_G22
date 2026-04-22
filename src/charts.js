@@ -310,6 +310,110 @@ export function renderClassicWordCloud(container, items, variant = "warm") {
     .text((item) => `${item.word}: ${item.count}`);
 }
 
+export function renderLollipopChart(container, items, options = {}) {
+  if (!container) {
+    return;
+  }
+  ensureD3();
+  const root = clearContainer(container);
+
+  if (!items.length) {
+    container.appendChild(emptyState(options.emptyMessage || "No word frequency data is available yet."));
+    return;
+  }
+
+  const data = items.map((item) => ({
+    label: item.word,
+    value: item.count
+  }));
+
+  const width = 760;
+  const rowHeight = 30;
+  const height = Math.max(280, data.length * rowHeight + 72);
+  const margin = { top: 18, right: 40, bottom: 30, left: 150 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+  const stemColor = options.variant === "cool" ? "#2f6f70" : "#a8481f";
+  const dotColor = options.variant === "cool" ? "#3f8c8e" : "#d0702f";
+
+  const svg = createResponsiveSvg(root, width, height);
+  const chart = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear()
+    .domain([0, d3.max(data, (item) => item.value) || 1])
+    .nice()
+    .range([0, innerWidth]);
+
+  const y = d3.scaleBand()
+    .domain(data.map((item) => item.label))
+    .range([0, innerHeight])
+    .padding(0.35);
+
+  chart.append("g")
+    .attr("class", "chart-grid")
+    .call(d3.axisBottom(x).ticks(5).tickSize(innerHeight).tickFormat(""))
+    .call((group) => {
+      group.attr("transform", "translate(0,0)");
+      group.select(".domain").remove();
+      group.selectAll("line").attr("stroke", "rgba(100, 91, 80, 0.1)");
+    });
+
+  chart.append("g")
+    .attr("transform", `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x).ticks(5).tickSizeOuter(0))
+    .call(applyAxisStyle);
+
+  chart.append("g")
+    .call(d3.axisLeft(y).tickSize(0))
+    .call((group) => {
+      group.select(".domain").remove();
+      group.selectAll("text")
+        .attr("fill", "#645b50")
+        .style("font-size", "14px");
+    });
+
+  chart.selectAll(".lollipop-stem")
+    .data(data)
+    .enter()
+    .append("line")
+    .attr("class", "lollipop-stem")
+    .attr("x1", 0)
+    .attr("x2", (item) => x(item.value))
+    .attr("y1", (item) => (y(item.label) || 0) + y.bandwidth() / 2)
+    .attr("y2", (item) => (y(item.label) || 0) + y.bandwidth() / 2)
+    .attr("stroke", stemColor)
+    .attr("stroke-opacity", 0.55)
+    .attr("stroke-width", 2);
+
+  chart.selectAll(".lollipop-dot")
+    .data(data)
+    .enter()
+    .append("circle")
+    .attr("class", "lollipop-dot")
+    .attr("cx", (item) => x(item.value))
+    .attr("cy", (item) => (y(item.label) || 0) + y.bandwidth() / 2)
+    .attr("r", 5)
+    .attr("fill", dotColor);
+
+  chart.selectAll(".lollipop-value")
+    .data(data)
+    .enter()
+    .append("text")
+    .attr("class", "lollipop-value")
+    .attr("x", (item) => x(item.value) + 8)
+    .attr("y", (item) => (y(item.label) || 0) + y.bandwidth() / 2)
+    .attr("dominant-baseline", "middle")
+    .attr("fill", "#201a15")
+    .style("font-size", "11px")
+    .text((item) => item.value);
+
+  svg.append("text")
+    .attr("x", margin.left)
+    .attr("y", 12)
+    .attr("class", "bar-axis-label")
+    .text(options.xLabel || "Count");
+}
+
 export function renderWordTable(container, items, title) {
   if (!container) {
     return;
