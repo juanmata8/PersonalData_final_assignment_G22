@@ -45,24 +45,240 @@ const TOPIC_RULES = {
   "data/querying": ["sql", "query", "database", "schema", "migration", "join", "orm"]
 };
 
-// Explicit vocabulary used for offloading/non-offloading word analysis.
-// Any word outside these lists is ignored in word-frequency outputs.
-const OFFLOADING_VOCABULARY = [
-  "fix", "make", "write", "implement", "refactor", "generate", "create",
-  "update", "optimize", "add", "build", "draft", "produce", "rewrite"
-];
-
-const NON_OFFLOADING_VOCABULARY = [
-  "explain", "why", "how", "what", "teach", "describe", "clarify", "walk", "through"
-];
-
-const ANALYSIS_VOCABULARY = new Set([
-  ...OFFLOADING_VOCABULARY,
-  ...NON_OFFLOADING_VOCABULARY
+// Words that carry no signal for frequency analysis.
+// Contractions are normalised before tokenization, so only post-strip forms appear here.
+const STOPWORDS = new Set([
+  "the", "and", "for", "that", "with", "this", "from", "have", "your", "into", "about", "there",
+  "would", "could", "should", "what", "when", "where", "which", "while", "please", "thanks", "need",
+  "can", "you", "are", "not", "but", "use", "example", "question", "run", "current", "yet", "get", "all",
+  "help", "using", "used", "user", "users", "assistant", "response", "prompt", "chatgpt", "claude",
+  "gemini", "just", "than", "them", "then", "their", "will", "were", "been", "being", "also", "here",
+  "code", "coding", "project", "want", "they", "very", "some", "more", "most",
+  "does", "like", "each", "after", "before", "because", "through", "over",
+  "under", "able", "count", "counts", "generated", "locally", "browser", "extension", "data",
+  // contraction forms that survive apostrophe stripping (e.g. "don't" → "dont")
+  "dont", "cant", "wont", "isnt", "arent", "wasnt", "werent", "hasnt", "havent", "didnt",
+  "wouldnt", "couldnt", "shouldnt", "ive", "youre", "thats", "its", "im", "id", "ill"
 ]);
 
-const OFFLOADING_VOCABULARY_SET = new Set(OFFLOADING_VOCABULARY);
-const NON_OFFLOADING_VOCABULARY_SET = new Set(NON_OFFLOADING_VOCABULARY);
+// ---------------------------------------------------------------------------
+// Word quality scores
+// Positive = exploration / learning-oriented (green)
+// Negative = offloading / delegation-oriented (red)
+// ---------------------------------------------------------------------------
+export const WORD_QUALITY_SCORES = {
+  // =========================================
+  // STRONG OFFLOADING → RED (-2)
+  // Direct delegation / asking AI to do work
+  // =========================================
+  fix: -2,
+  generate: -2,
+  write: -2,
+  implement: -2,
+  create: -2,
+  build: -2,
+  make: -2,
+  produce: -2,
+  draft: -2,
+  rewrite: -2,
+  add: -2,
+  update: -2,
+  complete: -2,
+  finish: -2,
+  solve: -2,
+  provide: -2,
+  give: -2,
+  deliver: -2,
+  convert: -2,
+  replace: -2,
+  improve: -2,
+  optimize: -2,
+  automate: -2,
+  generatecode: -2,
+  scaffold: -2,
+  patch: -2,
+  codeit: -2,
+  do: -2,
+  handle: -2,
+  setup: -2,
+  configure: -2,
+  deploy: -2,
+  install: -2,
+  refactor: -2,
+  debug: -2,
+  debugthis: -2,
+  resolve: -2,
+  repair: -2,
+  correct: -2,
+  fill: -2,
+  finishthis: -2,
+
+  // =========================================
+  // MILD OFFLOADING → ORANGE (-1)
+  // Concrete output requests
+  // =========================================
+  function: -1,
+  file: -1,
+  script: -1,
+  class: -1,
+  component: -1,
+  endpoint: -1,
+  method: -1,
+  module: -1,
+  package: -1,
+  api: -1,
+  query: -1,
+  schema: -1,
+  migration: -1,
+  test: -1,
+  testcase: -1,
+  unittest: -1,
+  integrationtest: -1,
+  hook: -1,
+  service: -1,
+  repository: -1,
+  controller: -1,
+  handler: -1,
+  middleware: -1,
+  route: -1,
+  config: -1,
+  configuration: -1,
+  dockerfile: -1,
+  pipeline: -1,
+  workflow: -1,
+  ci: -1,
+  cd: -1,
+  yaml: -1,
+  json: -1,
+  sql: -1,
+  regex: -1,
+  parser: -1,
+  validator: -1,
+  serializer: -1,
+  mapper: -1,
+  adapter: -1,
+  interface: -1,
+  abstraction: -1,
+  architecture: -1,
+
+  // =========================================
+  // MILD EXPLORATION → LIGHT GREEN (+1)
+  // Asking to understand / compare
+  // =========================================
+  compare: 1,
+  difference: 1,
+  describe: 1,
+  overview: 1,
+  concept: 1,
+  theory: 1,
+  meaning: 1,
+  definition: 1,
+  clarify: 1,
+  discuss: 1,
+  summarize: 1,
+  summary: 1,
+  explaination: 1,
+  interpretation: 1,
+  reason: 1,
+  reasons: 1,
+  analyze: 1,
+  analysis: 1,
+  evaluate: 1,
+  tradeoff: 1,
+  tradeoffs: 1,
+  pros: 1,
+  cons: 1,
+  advantage: 1,
+  disadvantages: 1,
+  benefits: 1,
+  alternatives: 1,
+  comparison: 1,
+  distinctions: 1,
+  intuition: 1,
+  principles: 1,
+  approach: 1,
+  strategy: 1,
+  patterns: 1,
+  pattern: 1,
+  bestpractice: 1,
+  guideline: 1,
+  guidelines: 1,
+
+  // =========================================
+  // STRONG EXPLORATION → GREEN (+2)
+  // Learning-oriented prompts
+  // =========================================
+  explain: 2,
+  why: 2,
+  how: 2,
+  teach: 2,
+  walkthrough: 2,
+  understand: 2,
+  understanding: 2,
+  reasoning: 2,
+  reasonabout: 2,
+  learn: 2,
+  learning: 2,
+  study: 2,
+  clarifythis: 2,
+  elaborate: 2,
+  elaborateon: 2,
+  detail: 2,
+  details: 2,
+  intuitionbehind: 2,
+  howdoes: 2,
+  whatis: 2,
+  whenuse: 2,
+  whenshould: 2,
+  whenwould: 2,
+  whydoes: 2,
+  whyshould: 2,
+  whywould: 2,
+  teachme: 2,
+  helpmeunderstand: 2,
+  tellmemore: 2,
+  deeper: 2,
+  deeply: 2,
+  explore: 2,
+  exploration: 2
+};
+
+// ---------------------------------------------------------------------------
+// Color palette for word quality scores
+// ---------------------------------------------------------------------------
+const WORD_COLORS = {
+  strong_offloading:  "#ef4444", // red-500     — score === -2
+  mild_offloading:    "#f97316", // orange-500  — score === -1
+  neutral:            "#94a3b8", // slate-400   — score === 0 / unknown
+  mild_exploration:   "#86efac", // green-300   — score === +1
+  strong_exploration: "#22c55e", // green-500   — score === +2
+};
+
+/**
+ * Returns a CSS color string for a word based on its quality score.
+ * Words absent from WORD_QUALITY_SCORES are treated as neutral.
+ *
+ * @param {string} word
+ * @returns {string} CSS color
+ */
+export function getWordColor(word) {
+  const score = WORD_QUALITY_SCORES[word.toLowerCase()] ?? 0;
+  if (score <= -2) return WORD_COLORS.strong_offloading;
+  if (score === -1) return WORD_COLORS.mild_offloading;
+  if (score === 0)  return WORD_COLORS.neutral;
+  if (score === 1)  return WORD_COLORS.mild_exploration;
+  return WORD_COLORS.strong_exploration; // score >= 2
+}
+
+/**
+ * Returns the numeric quality score for a word (0 if unknown).
+ *
+ * @param {string} word
+ * @returns {number}
+ */
+export function getWordScore(word) {
+  return WORD_QUALITY_SCORES[word.toLowerCase()] ?? 0;
+}
 
 function safeString(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -143,21 +359,34 @@ function splitCamelCase(word) {
 }
 
 export function tokenizeText(text) {
-  return tokenizeTextByAllowedVocabulary(text);
+  return normalizeWhitespace(text)
+    .toLowerCase()
+    // Normalise apostrophes (curly and straight) before stripping so
+    // "don't" → "dont" hits the stopword rather than becoming noise.
+    .replace(/[''`]/g, "")
+    // Keep word characters plus the symbols that are meaningful in code identifiers.
+    .replace(/[^a-z0-9_#+.\-\s]/g, " ")
+    .split(/\s+/)
+    // Split any surviving camelCase tokens — this runs on already-lowercased text
+    // so it only catches mixed-case leftovers from the original (e.g. identifiers
+    // preserved through the replace). Pass each word through splitCamelCase in case
+    // the original had mixed case before lowercasing compressed it — realistically
+    // this mostly catches underscore_separated and already-lowercase terms, and that
+    // is fine; the camelCase splitting happens on the original text below.
+    .flatMap((word) => (word.length > 2 && !STOPWORDS.has(word) ? [word] : []))
+    // Second pass: re-process the original text for camelCase identifiers before
+    // lowercasing nukes the boundaries, then merge with the token list.
+    // We do this by also tokenizing the original (pre-lowercase) text separately.
+    // See the companion pass in tokenizeTextWithCamelCase below.
+    ;
 }
 
-// Kept for backward-compat. Uses explicit analysis vocabulary filtering.
+// Full tokenizer that preserves camelCase splitting from the original text.
+// tokenizeText is kept for backward-compat; all internal callers use this.
 export function tokenizeTextFull(text) {
-  return tokenizeTextByAllowedVocabulary(text);
-}
-
-export function tokenizeTextByAllowedVocabulary(text, allowedVocabulary = ANALYSIS_VOCABULARY) {
   const raw = normalizeWhitespace(text);
 
-  if (!raw) {
-    return [];
-  }
-
+  // Pass 1: split on whitespace to get raw tokens (preserving original case for camelCase detection).
   const rawTokens = raw
     .replace(/[''`]/g, "")
     .split(/[\s,.!?;:()\[\]{}<>"]+/)
@@ -167,9 +396,11 @@ export function tokenizeTextByAllowedVocabulary(text, allowedVocabulary = ANALYS
   const result = [];
 
   for (const rawToken of rawTokens) {
+    // Split camelCase/PascalCase before lowercasing.
     const parts = splitCamelCase(rawToken)
-      .map((part) => part.replace(/[^a-z0-9_#+.\-]/g, ""))
-      .filter((part) => part.length > 2 && allowedVocabulary.has(part));
+      // Strip non-identifier chars that survive split (punctuation attached to tokens).
+      .map((p) => p.replace(/[^a-z0-9_#+.\-]/g, ""))
+      .filter((p) => p.length > 2 && !STOPWORDS.has(p));
 
     for (const part of parts) {
       if (!seen.has(part)) {
@@ -252,8 +483,8 @@ export function normalizeInteraction(rawInteraction) {
     isCodingRelated: codingRelated,
     codingTopic,
     offloadingLabel,
-    tokenizedPromptWords: tokenizeTextByAllowedVocabulary(promptText),
-    tokenizedResponseWords: tokenizeTextByAllowedVocabulary(responseText)
+    tokenizedPromptWords: tokenizeTextFull(promptText),
+    tokenizedResponseWords: tokenizeTextFull(responseText)
   };
 }
 
@@ -803,6 +1034,13 @@ function toChronologicalEntries(counter) {
   return Object.entries(counter).sort((a, b) => a[0].localeCompare(b[0]));
 }
 
+/**
+ * Returns the top `limit` words from the given field across all interactions,
+ * each enriched with a quality `score` and a CSS `color` for word-cloud rendering.
+ *
+ * Shape of each entry:
+ *   { word: string, count: number, score: number, color: string }
+ */
 function topWords(interactions, field, limit = 30) {
   const counts = {};
   interactions.forEach((interaction) => {
@@ -812,41 +1050,12 @@ function topWords(interactions, field, limit = 30) {
 
   return toSortedEntries(counts)
     .slice(0, limit)
-    .map(([word, count]) => ({ word, count }));
-}
-
-function buildCategoryWordUsage(interactions, limit = 6) {
-  const counters = {
-    non_offloading: {},
-    offloading: {},
-    unknown: {}
-  };
-
-  interactions.forEach((interaction) => {
-    const label = counters[interaction.offloadingLabel] ? interaction.offloadingLabel : "unknown";
-    const allowedVocabulary = label === "offloading"
-      ? OFFLOADING_VOCABULARY_SET
-      : label === "non_offloading"
-        ? NON_OFFLOADING_VOCABULARY_SET
-        : null;
-
-    if (!allowedVocabulary) {
-      return;
-    }
-
-    const words = tokenizeTextByAllowedVocabulary(interaction.promptText, allowedVocabulary);
-    words.forEach((word) => incrementCounter(counters[label], word));
-  });
-
-  const toTopWordList = (counter) => toSortedEntries(counter)
-    .slice(0, limit)
-    .map(([word, count]) => ({ word, count }));
-
-  return {
-    good: toTopWordList(counters.non_offloading),
-    bad: toTopWordList(counters.offloading),
-    unknown: toTopWordList(counters.unknown)
-  };
+    .map(([word, count]) => ({
+      word,
+      count,
+      score: getWordScore(word),
+      color: getWordColor(word)
+    }));
 }
 
 function strongestTimeBucket(hourlyCounts) {
@@ -1161,7 +1370,6 @@ export function buildTimePatternDetail(conversations, options = {}) {
       badValues: series.badCounts,
       unknownValues: series.unknownCounts
     },
-    categoryWordUsage: buildCategoryWordUsage(filtered),
     filteredHourlyCounts: buildFilteredHourlyCounts(filtered, {
       includeGood:    options.includeGood,
       includeBad:     options.includeBad,
