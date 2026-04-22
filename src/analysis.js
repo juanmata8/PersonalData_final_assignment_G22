@@ -50,6 +50,7 @@ const TOPIC_RULES = {
 const STOPWORDS = new Set([
   "the", "and", "for", "that", "with", "this", "from", "have", "your", "into", "about", "there",
   "would", "could", "should", "what", "when", "where", "which", "while", "please", "thanks", "need",
+  "can", "you", "are", "not", "but", "use", "example", "question", "run", "current", "yet", "get", "all",
   "help", "using", "used", "user", "users", "assistant", "response", "prompt", "chatgpt", "claude",
   "gemini", "just", "than", "them", "then", "their", "will", "were", "been", "being", "also", "here",
   "code", "coding", "project", "want", "they", "very", "some", "more", "most",
@@ -59,6 +60,225 @@ const STOPWORDS = new Set([
   "dont", "cant", "wont", "isnt", "arent", "wasnt", "werent", "hasnt", "havent", "didnt",
   "wouldnt", "couldnt", "shouldnt", "ive", "youre", "thats", "its", "im", "id", "ill"
 ]);
+
+// ---------------------------------------------------------------------------
+// Word quality scores
+// Positive = exploration / learning-oriented (green)
+// Negative = offloading / delegation-oriented (red)
+// ---------------------------------------------------------------------------
+export const WORD_QUALITY_SCORES = {
+  // =========================================
+  // STRONG OFFLOADING → RED (-2)
+  // Direct delegation / asking AI to do work
+  // =========================================
+  fix: -2,
+  generate: -2,
+  write: -2,
+  implement: -2,
+  create: -2,
+  build: -2,
+  make: -2,
+  produce: -2,
+  draft: -2,
+  rewrite: -2,
+  add: -2,
+  update: -2,
+  complete: -2,
+  finish: -2,
+  solve: -2,
+  provide: -2,
+  give: -2,
+  deliver: -2,
+  convert: -2,
+  replace: -2,
+  improve: -2,
+  optimize: -2,
+  automate: -2,
+  generatecode: -2,
+  scaffold: -2,
+  patch: -2,
+  codeit: -2,
+  do: -2,
+  handle: -2,
+  setup: -2,
+  configure: -2,
+  deploy: -2,
+  install: -2,
+  refactor: -2,
+  debug: -2,
+  debugthis: -2,
+  resolve: -2,
+  repair: -2,
+  correct: -2,
+  fill: -2,
+  finishthis: -2,
+
+  // =========================================
+  // MILD OFFLOADING → ORANGE (-1)
+  // Concrete output requests
+  // =========================================
+  function: -1,
+  file: -1,
+  script: -1,
+  class: -1,
+  component: -1,
+  endpoint: -1,
+  method: -1,
+  module: -1,
+  package: -1,
+  api: -1,
+  query: -1,
+  schema: -1,
+  migration: -1,
+  test: -1,
+  testcase: -1,
+  unittest: -1,
+  integrationtest: -1,
+  hook: -1,
+  service: -1,
+  repository: -1,
+  controller: -1,
+  handler: -1,
+  middleware: -1,
+  route: -1,
+  config: -1,
+  configuration: -1,
+  dockerfile: -1,
+  pipeline: -1,
+  workflow: -1,
+  ci: -1,
+  cd: -1,
+  yaml: -1,
+  json: -1,
+  sql: -1,
+  regex: -1,
+  parser: -1,
+  validator: -1,
+  serializer: -1,
+  mapper: -1,
+  adapter: -1,
+  interface: -1,
+  abstraction: -1,
+  architecture: -1,
+
+  // =========================================
+  // MILD EXPLORATION → LIGHT GREEN (+1)
+  // Asking to understand / compare
+  // =========================================
+  compare: 1,
+  difference: 1,
+  describe: 1,
+  overview: 1,
+  concept: 1,
+  theory: 1,
+  meaning: 1,
+  definition: 1,
+  clarify: 1,
+  discuss: 1,
+  summarize: 1,
+  summary: 1,
+  explaination: 1,
+  interpretation: 1,
+  reason: 1,
+  reasons: 1,
+  analyze: 1,
+  analysis: 1,
+  evaluate: 1,
+  tradeoff: 1,
+  tradeoffs: 1,
+  pros: 1,
+  cons: 1,
+  advantage: 1,
+  disadvantages: 1,
+  benefits: 1,
+  alternatives: 1,
+  comparison: 1,
+  distinctions: 1,
+  intuition: 1,
+  principles: 1,
+  approach: 1,
+  strategy: 1,
+  patterns: 1,
+  pattern: 1,
+  bestpractice: 1,
+  guideline: 1,
+  guidelines: 1,
+
+  // =========================================
+  // STRONG EXPLORATION → GREEN (+2)
+  // Learning-oriented prompts
+  // =========================================
+  explain: 2,
+  why: 2,
+  how: 2,
+  teach: 2,
+  walkthrough: 2,
+  understand: 2,
+  understanding: 2,
+  reasoning: 2,
+  reasonabout: 2,
+  learn: 2,
+  learning: 2,
+  study: 2,
+  clarifythis: 2,
+  elaborate: 2,
+  elaborateon: 2,
+  detail: 2,
+  details: 2,
+  intuitionbehind: 2,
+  howdoes: 2,
+  whatis: 2,
+  whenuse: 2,
+  whenshould: 2,
+  whenwould: 2,
+  whydoes: 2,
+  whyshould: 2,
+  whywould: 2,
+  teachme: 2,
+  helpmeunderstand: 2,
+  tellmemore: 2,
+  deeper: 2,
+  deeply: 2,
+  explore: 2,
+  exploration: 2
+};
+
+// ---------------------------------------------------------------------------
+// Color palette for word quality scores
+// ---------------------------------------------------------------------------
+const WORD_COLORS = {
+  strong_offloading:  "#ef4444", // red-500     — score === -2
+  mild_offloading:    "#f97316", // orange-500  — score === -1
+  neutral:            "#94a3b8", // slate-400   — score === 0 / unknown
+  mild_exploration:   "#86efac", // green-300   — score === +1
+  strong_exploration: "#22c55e", // green-500   — score === +2
+};
+
+/**
+ * Returns a CSS color string for a word based on its quality score.
+ * Words absent from WORD_QUALITY_SCORES are treated as neutral.
+ *
+ * @param {string} word
+ * @returns {string} CSS color
+ */
+export function getWordColor(word) {
+  const score = WORD_QUALITY_SCORES[word.toLowerCase()] ?? 0;
+  if (score <= -2) return WORD_COLORS.strong_offloading;
+  if (score === -1) return WORD_COLORS.mild_offloading;
+  if (score === 0)  return WORD_COLORS.neutral;
+  if (score === 1)  return WORD_COLORS.mild_exploration;
+  return WORD_COLORS.strong_exploration; // score >= 2
+}
+
+/**
+ * Returns the numeric quality score for a word (0 if unknown).
+ *
+ * @param {string} word
+ * @returns {number}
+ */
+export function getWordScore(word) {
+  return WORD_QUALITY_SCORES[word.toLowerCase()] ?? 0;
+}
 
 function safeString(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -814,6 +1034,13 @@ function toChronologicalEntries(counter) {
   return Object.entries(counter).sort((a, b) => a[0].localeCompare(b[0]));
 }
 
+/**
+ * Returns the top `limit` words from the given field across all interactions,
+ * each enriched with a quality `score` and a CSS `color` for word-cloud rendering.
+ *
+ * Shape of each entry:
+ *   { word: string, count: number, score: number, color: string }
+ */
 function topWords(interactions, field, limit = 30) {
   const counts = {};
   interactions.forEach((interaction) => {
@@ -823,7 +1050,12 @@ function topWords(interactions, field, limit = 30) {
 
   return toSortedEntries(counts)
     .slice(0, limit)
-    .map(([word, count]) => ({ word, count }));
+    .map(([word, count]) => ({
+      word,
+      count,
+      score: getWordScore(word),
+      color: getWordColor(word)
+    }));
 }
 
 function strongestTimeBucket(hourlyCounts) {
