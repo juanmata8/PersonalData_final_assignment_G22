@@ -45,21 +45,24 @@ const TOPIC_RULES = {
   "data/querying": ["sql", "query", "database", "schema", "migration", "join", "orm"]
 };
 
-// Words that carry no signal for frequency analysis.
-// Contractions are normalised before tokenization, so only post-strip forms appear here.
-const STOPWORDS = new Set([
-  "the", "and", "for", "that", "with", "this", "from", "have", "your", "into", "about", "there",
-  "would", "could", "should", "what", "when", "where", "which", "while", "please", "thanks", "need",
-  "can", "you", "are", "not", "but", "use", "example", "question", "run", "current", "yet", "get", "all",
-  "help", "using", "used", "user", "users", "assistant", "response", "prompt", "chatgpt", "claude",
-  "gemini", "just", "than", "them", "then", "their", "will", "were", "been", "being", "also", "here",
-  "code", "coding", "project", "want", "they", "very", "some", "more", "most",
-  "does", "like", "each", "after", "before", "because", "through", "over",
-  "under", "able", "count", "counts", "generated", "locally", "browser", "extension", "data",
-  // contraction forms that survive apostrophe stripping (e.g. "don't" → "dont")
-  "dont", "cant", "wont", "isnt", "arent", "wasnt", "werent", "hasnt", "havent", "didnt",
-  "wouldnt", "couldnt", "shouldnt", "ive", "youre", "thats", "its", "im", "id", "ill"
+// Explicit vocabulary used for offloading/non-offloading word analysis.
+// Any word outside these lists is ignored in word-frequency outputs.
+const OFFLOADING_VOCABULARY = [
+  "fix", "make", "write", "implement", "refactor", "generate", "create",
+  "update", "optimize", "add", "build", "draft", "produce", "rewrite"
+];
+
+const NON_OFFLOADING_VOCABULARY = [
+  "explain", "why", "how", "what", "teach", "describe", "clarify", "walk", "through"
+];
+
+const ANALYSIS_VOCABULARY = new Set([
+  ...OFFLOADING_VOCABULARY,
+  ...NON_OFFLOADING_VOCABULARY
 ]);
+
+const OFFLOADING_VOCABULARY_SET = new Set(OFFLOADING_VOCABULARY);
+const NON_OFFLOADING_VOCABULARY_SET = new Set(NON_OFFLOADING_VOCABULARY);
 
 function safeString(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -140,34 +143,21 @@ function splitCamelCase(word) {
 }
 
 export function tokenizeText(text) {
-  return normalizeWhitespace(text)
-    .toLowerCase()
-    // Normalise apostrophes (curly and straight) before stripping so
-    // "don't" → "dont" hits the stopword rather than becoming noise.
-    .replace(/[''`]/g, "")
-    // Keep word characters plus the symbols that are meaningful in code identifiers.
-    .replace(/[^a-z0-9_#+.\-\s]/g, " ")
-    .split(/\s+/)
-    // Split any surviving camelCase tokens — this runs on already-lowercased text
-    // so it only catches mixed-case leftovers from the original (e.g. identifiers
-    // preserved through the replace). Pass each word through splitCamelCase in case
-    // the original had mixed case before lowercasing compressed it — realistically
-    // this mostly catches underscore_separated and already-lowercase terms, and that
-    // is fine; the camelCase splitting happens on the original text below.
-    .flatMap((word) => (word.length > 2 && !STOPWORDS.has(word) ? [word] : []))
-    // Second pass: re-process the original text for camelCase identifiers before
-    // lowercasing nukes the boundaries, then merge with the token list.
-    // We do this by also tokenizing the original (pre-lowercase) text separately.
-    // See the companion pass in tokenizeTextWithCamelCase below.
-    ;
+  return tokenizeTextByAllowedVocabulary(text);
 }
 
-// Full tokenizer that preserves camelCase splitting from the original text.
-// tokenizeText is kept for backward-compat; all internal callers use this.
+// Kept for backward-compat. Uses explicit analysis vocabulary filtering.
 export function tokenizeTextFull(text) {
+  return tokenizeTextByAllowedVocabulary(text);
+}
+
+export function tokenizeTextByAllowedVocabulary(text, allowedVocabulary = ANALYSIS_VOCABULARY) {
   const raw = normalizeWhitespace(text);
 
-  // Pass 1: split on whitespace to get raw tokens (preserving original case for camelCase detection).
+  if (!raw) {
+    return [];
+  }
+
   const rawTokens = raw
     .replace(/[''`]/g, "")
     .split(/[\s,.!?;:()\[\]{}<>"]+/)
@@ -177,11 +167,9 @@ export function tokenizeTextFull(text) {
   const result = [];
 
   for (const rawToken of rawTokens) {
-    // Split camelCase/PascalCase before lowercasing.
     const parts = splitCamelCase(rawToken)
-      // Strip non-identifier chars that survive split (punctuation attached to tokens).
-      .map((p) => p.replace(/[^a-z0-9_#+.\-]/g, ""))
-      .filter((p) => p.length > 2 && !STOPWORDS.has(p));
+      .map((part) => part.replace(/[^a-z0-9_#+.\-]/g, ""))
+      .filter((part) => part.length > 2 && allowedVocabulary.has(part));
 
     for (const part of parts) {
       if (!seen.has(part)) {
@@ -264,8 +252,8 @@ export function normalizeInteraction(rawInteraction) {
     isCodingRelated: codingRelated,
     codingTopic,
     offloadingLabel,
-    tokenizedPromptWords: tokenizeTextFull(promptText),
-    tokenizedResponseWords: tokenizeTextFull(responseText)
+    tokenizedPromptWords: tokenizeTextByAllowedVocabulary(promptText),
+    tokenizedResponseWords: tokenizeTextByAllowedVocabulary(responseText)
   };
 }
 
@@ -827,6 +815,40 @@ function topWords(interactions, field, limit = 30) {
     .map(([word, count]) => ({ word, count }));
 }
 
+function buildCategoryWordUsage(interactions, limit = 6) {
+  const counters = {
+    non_offloading: {},
+    offloading: {},
+    unknown: {}
+  };
+
+  interactions.forEach((interaction) => {
+    const label = counters[interaction.offloadingLabel] ? interaction.offloadingLabel : "unknown";
+    const allowedVocabulary = label === "offloading"
+      ? OFFLOADING_VOCABULARY_SET
+      : label === "non_offloading"
+        ? NON_OFFLOADING_VOCABULARY_SET
+        : null;
+
+    if (!allowedVocabulary) {
+      return;
+    }
+
+    const words = tokenizeTextByAllowedVocabulary(interaction.promptText, allowedVocabulary);
+    words.forEach((word) => incrementCounter(counters[label], word));
+  });
+
+  const toTopWordList = (counter) => toSortedEntries(counter)
+    .slice(0, limit)
+    .map(([word, count]) => ({ word, count }));
+
+  return {
+    good: toTopWordList(counters.non_offloading),
+    bad: toTopWordList(counters.offloading),
+    unknown: toTopWordList(counters.unknown)
+  };
+}
+
 function strongestTimeBucket(hourlyCounts) {
   const buckets = [
     { label: "Late night", hours: [0, 1, 2, 3, 4] },
@@ -1139,6 +1161,7 @@ export function buildTimePatternDetail(conversations, options = {}) {
       badValues: series.badCounts,
       unknownValues: series.unknownCounts
     },
+    categoryWordUsage: buildCategoryWordUsage(filtered),
     filteredHourlyCounts: buildFilteredHourlyCounts(filtered, {
       includeGood:    options.includeGood,
       includeBad:     options.includeBad,
