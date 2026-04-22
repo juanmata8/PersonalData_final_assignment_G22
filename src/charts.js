@@ -178,6 +178,10 @@ export function renderWordCloud(container, items, variant = "warm") {
     .append("span")
     .attr("class", `word-pill ${variant === "cool" ? "alt" : ""}`.trim())
     .style("font-size", (item) => `${size(item.count)}px`)
+    // Use the quality-score color from analysis.js if present, else fall back to
+    // the default CSS styling by leaving the property unset (null = no inline style).
+    .style("color", (item) => item.color ?? null)
+    .style("border-color", (item) => item.color ?? null)
     .text((item) => `${item.word} (${item.count})`);
 }
 
