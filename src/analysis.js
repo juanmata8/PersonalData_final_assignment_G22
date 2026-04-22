@@ -50,6 +50,7 @@ const TOPIC_RULES = {
 const STOPWORDS = new Set([
   "the", "and", "for", "that", "with", "this", "from", "have", "your", "into", "about", "there",
   "would", "could", "should", "what", "when", "where", "which", "while", "please", "thanks", "need",
+  "can", "you", "are", "not", "but", "use", "example", "question", "run", "current", "yet", "get", "all",
   "help", "using", "used", "user", "users", "assistant", "response", "prompt", "chatgpt", "claude",
   "gemini", "just", "than", "them", "then", "their", "will", "were", "been", "being", "also", "here",
   "code", "coding", "project", "want", "they", "very", "some", "more", "most",
