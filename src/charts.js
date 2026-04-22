@@ -203,8 +203,8 @@ export function renderClassicWordCloud(container, items, variant = "warm") {
   const maxValue = d3.max(filteredItems, (item) => item.count) || 1;
   const minValue = d3.min(filteredItems, (item) => item.count) || 1;
   const fontScale = minValue === maxValue
-    ? () => 22
-    : d3.scaleSqrt().domain([minValue, maxValue]).range([12, 64]);
+    ? () => 24
+    : d3.scaleSqrt().domain([minValue, maxValue]).range([16, 66]);
   const colorScale = d3.scaleSequential()
     .domain([0, Math.max(1, filteredItems.length - 1)])
     .interpolator(variant === "cool" ? d3.interpolateSinebow : d3.interpolateTurbo);
@@ -274,7 +274,7 @@ export function renderClassicWordCloud(container, items, variant = "warm") {
       for (let shrinkStep = 0; shrinkStep < 5 && !placement; shrinkStep += 1) {
         placement = findNonOverlappingPosition(item.word, size, index);
         if (!placement) {
-          size = Math.max(10, size * 0.9);
+          size = Math.max(13, size * 0.92);
         }
       }
 
