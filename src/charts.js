@@ -338,8 +338,8 @@ export function renderLollipopChart(container, items, options = {}) {
   const margin = { top: 18, right: 40, bottom: 30, left: 150 };
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
-  const stemColor = options.variant === "cool" ? "#2f6f70" : "#a8481f";
-  const dotColor = options.variant === "cool" ? "#3f8c8e" : "#d0702f";
+  const defaultStemColor = options.variant === "cool" ? "#2f6f70" : "#a8481f";
+  const defaultDotColor = options.variant === "cool" ? "#3f8c8e" : "#d0702f";
 
   const svg = createResponsiveSvg(root, width, height);
   const chart = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
@@ -386,7 +386,7 @@ export function renderLollipopChart(container, items, options = {}) {
     .attr("x2", (item) => x(item.value))
     .attr("y1", (item) => (y(item.label) || 0) + y.bandwidth() / 2)
     .attr("y2", (item) => (y(item.label) || 0) + y.bandwidth() / 2)
-    .attr("stroke", stemColor)
+    .attr("stroke", (item) => items.find((orig) => orig.word === item.label)?.color ?? defaultStemColor)
     .attr("stroke-opacity", 0.55)
     .attr("stroke-width", 2);
 
@@ -398,7 +398,7 @@ export function renderLollipopChart(container, items, options = {}) {
     .attr("cx", (item) => x(item.value))
     .attr("cy", (item) => (y(item.label) || 0) + y.bandwidth() / 2)
     .attr("r", 5)
-    .attr("fill", dotColor);
+    .attr("fill", (item) => items.find((orig) => orig.word === item.label)?.color ?? defaultDotColor);
 
   chart.selectAll(".lollipop-value")
     .data(data)
