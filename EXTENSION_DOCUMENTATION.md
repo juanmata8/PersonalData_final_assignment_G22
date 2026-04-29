@@ -7,7 +7,7 @@ LLM Coding Explorer is a Chrome Manifest V3 browser extension that helps users i
 - JSON conversation import through the setup page
 - live capture from ChatGPT, Claude, and Gemini through content scripts
 
-All imported and captured records are stored in a ChatGPT-style conversation export format, then normalized into interaction pairs for analysis.
+All imported and captured records are stored in a ChatGPT-style conversation export format, can be exported again from the setup page as `conversations.json`, then normalized into interaction pairs for analysis.
 
 The extension renders its visualizations with a local vendored D3.js bundle included in the extension package, rather than loading chart code from a CDN.
 
@@ -19,7 +19,11 @@ The setup page accepts a `conversations.json` style file and parses it locally i
 
 Only records matching that structure are imported.
 
-### 2. Live capture
+### 2. JSON conversation export
+
+The setup page can export the currently stored local conversation records as `conversations.json`. The export is generated directly in the browser from `chrome.storage.local`.
+
+### 3. Live capture
 
 For ChatGPT, Claude, and Gemini, the extension injects a content script that:
 
@@ -30,7 +34,7 @@ For ChatGPT, Claude, and Gemini, the extension injects a content script that:
 
 The background service worker checks whether capture is enabled for that source and, if so, stores the exchange as a new conversation object in the same export-style format.
 
-### 3. Normalization
+### 4. Normalization
 
 Stored conversations are converted into interaction pairs by walking user-to-assistant paths in each conversation mapping. Each derived interaction is normalized into this shape:
 

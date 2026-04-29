@@ -15,7 +15,7 @@ The visualization layer uses a vendored local D3.js bundle, so charts remain sel
 ## Included pages
 
 - `index.html`: Popup launcher
-- `setup.html`: `conversations.json` import, source toggles, dataset reset, totals
+- `setup.html`: `conversations.json` import/export, source toggles, dataset reset, totals
 - `time.html`: Daily, hourly, and weekday usage views
 - `categories.html`: Topic chart, word clouds, top terms
 - `summary.html`: Score, reflection, recommendation

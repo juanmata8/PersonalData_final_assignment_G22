@@ -14,6 +14,7 @@ markActiveNav("setup");
 
 const jsonFileInput = document.getElementById("csvFile");
 const importBtn = document.getElementById("importBtn");
+const exportBtn = document.getElementById("exportBtn");
 const previewWrap = document.getElementById("previewWrap");
 const sourceList = document.getElementById("sourceList");
 const resetBtn = document.getElementById("resetBtn");
@@ -23,6 +24,23 @@ let parsedConversations = [];
 
 function syncImportButton() {
   importBtn.disabled = !parsedConversations.length;
+}
+
+function syncExportButton(conversations) {
+  exportBtn.disabled = !conversations.length;
+}
+
+function downloadJson(filename, value) {
+  const blob = new Blob([JSON.stringify(value, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function renderPreview(conversations) {
@@ -85,6 +103,7 @@ async function renderSnapshot() {
       note: sourceCountNote
     }
   ]);
+  syncExportButton(conversations);
 
   sourceList.innerHTML = "";
   Object.entries(sourceSettings).forEach(([source, enabled]) => {
@@ -167,6 +186,22 @@ importBtn.addEventListener("click", async () => {
     await renderSnapshot();
   } catch (error) {
     setStatus("importStatus", error.message || String(error), true);
+  }
+});
+
+exportBtn.addEventListener("click", async () => {
+  try {
+    const conversations = await getConversations();
+    if (!conversations.length) {
+      syncExportButton(conversations);
+      setStatus("exportStatus", "There are no stored conversations to export.", true);
+      return;
+    }
+
+    downloadJson("conversations.json", conversations);
+    setStatus("exportStatus", `Exported ${conversations.length} conversation records.`);
+  } catch (error) {
+    setStatus("exportStatus", error.message || String(error), true);
   }
 });
 
