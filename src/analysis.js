@@ -266,11 +266,9 @@ const WORD_COLORS = {
  */
 export function getWordColor(word) {
   const score = WORD_QUALITY_SCORES[word.toLowerCase()] ?? 0;
-  if (score <= -2) return WORD_COLORS.strong_offloading;
-  if (score === -1) return WORD_COLORS.mild_offloading;
-  if (score === 0)  return WORD_COLORS.neutral;
-  if (score === 1)  return WORD_COLORS.mild_exploration;
-  return WORD_COLORS.strong_exploration; // score >= 2
+  if (score < 0) return WORD_COLORS.strong_offloading;
+  if (score > 0) return WORD_COLORS.strong_exploration;
+  return WORD_COLORS.neutral;
 }
 
 /**
@@ -1057,7 +1055,8 @@ function topWords(interactions, field, limit = 30) {
       count,
       score: getWordScore(word),
       color: getWordColor(word)
-    }));
+    }))
+    .filter((item) => item.score !== 0); // Keep only red (offloading) and green (non-offloading) words
 }
 
 function strongestTimeBucket(hourlyCounts) {
