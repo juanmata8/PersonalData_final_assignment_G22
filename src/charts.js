@@ -168,6 +168,11 @@ export function renderWordCloud(container, items, variant = "warm") {
     return;
   }
 
+  createLegend(root, [
+    { label: "Offloading", className: "" },
+    { label: "Non-offloading", className: "green" }
+  ]);
+
   const maxValue = d3.max(items, (item) => item.count) || 1;
   const size = d3.scaleLinear().domain([1, maxValue]).range([12, 32]);
   const cloud = root.append("div").attr("class", "word-cloud");
@@ -196,6 +201,11 @@ export function renderClassicWordCloud(container, items, variant = "warm") {
     container.appendChild(emptyState("No coding-related words are available yet."));
     return;
   }
+
+  createLegend(root, [
+    { label: "Offloading", className: "" },
+    { label: "Non-offloading", className: "green" }
+  ]);
 
   const width = 1120;
   const height = 560;
@@ -326,6 +336,11 @@ export function renderLollipopChart(container, items, options = {}) {
     container.appendChild(emptyState(options.emptyMessage || "No word frequency data is available yet."));
     return;
   }
+
+  createLegend(root, [
+    { label: options.offloadingLabel || "Offloading", className: "" },
+    { label: options.nonOffloadingLabel || "Non-offloading", className: "green" }
+  ]);
 
   const data = items.map((item) => ({
     label: item.word,
