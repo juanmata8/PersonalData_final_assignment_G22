@@ -238,12 +238,16 @@ a {
 .source-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: rgba(255, 249, 239, 0.9);
+}
+
+.source-item > div {
+  flex: 1;
 }
 
 .source-item p {
@@ -255,8 +259,8 @@ a {
 .switch {
   position: relative;
   display: inline-flex;
-  width: 52px;
-  height: 30px;
+  width: 44px;
+  height: 24px;
 }
 
 .switch input {
@@ -276,10 +280,10 @@ a {
 .slider::before {
   content: "";
   position: absolute;
-  width: 22px;
-  height: 22px;
-  left: 4px;
-  top: 4px;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  top: 3px;
   border-radius: 50%;
   background: white;
   transition: transform 140ms ease;
@@ -290,7 +294,7 @@ a {
 }
 
 .switch input:checked + .slider::before {
-  transform: translateX(22px);
+  transform: translateX(20px);
 }
 
 .button-row,
