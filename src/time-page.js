@@ -34,6 +34,18 @@ function buildCategoryLabel(baseLabel, words, maxWords = 3) {
   return `${baseLabel} (${topWords.join(", ")})`;
 }
 
+function formatDailyDateLabel(value) {
+  const [year, month, day] = String(value).split("-");
+  const monthLabels = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const monthIndex = Number(month) - 1;
+
+  if (!year || !day || monthIndex < 0 || monthIndex >= monthLabels.length) {
+    return value;
+  }
+
+  return `${Number(day)}, ${monthLabels[monthIndex]} ${year}`;
+}
+
 function syncDateInputs(startInput, endInput, detail) {
   if (!detail.minDate || !detail.maxDate) {
     return;
@@ -85,7 +97,11 @@ async function renderPage() {
   syncDateInputs(ratioRangeStart, ratioRangeEnd, ratioDetail);
   syncDateInputs(countRangeStart, countRangeEnd, countDetail);
 
-  renderBarChart(dailyChart, analysis.dailyCounts.slice(-10), {
+  const dailyChartItems = analysis.dailyCounts
+    .slice(-10)
+    .map(([label, value]) => [formatDailyDateLabel(label), value]);
+
+  renderBarChart(dailyChart, dailyChartItems, {
     emptyMessage: "No interaction history is available yet."
   });
   renderBarChart(weekdayChart, analysis.weekdayCounts, {
